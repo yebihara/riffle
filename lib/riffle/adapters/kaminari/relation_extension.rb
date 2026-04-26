@@ -48,7 +48,7 @@ module Riffle
         end
 
         def load_from_cursor(cursor, page_num, per_page, store)
-          base_scope = except(:limit, :offset)
+          base_scope = build_base_scope
           snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
           fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
           result = fetcher.fetch(page: page_num, per_page: per_page)
@@ -59,7 +59,7 @@ module Riffle
         end
 
         def load_with_new_cursor(page_num, per_page, store)
-          base_scope = except(:limit, :offset)
+          base_scope = build_base_scope
           all_ids = base_scope.pluck(klass.primary_key)
           total = all_ids.size
 
@@ -73,6 +73,16 @@ module Riffle
           result = fetcher.fetch(page: page_num, per_page: per_page)
 
           result.records
+        end
+
+        # Returns a relation suitable for passing to PageFetcher: the original
+        # scope minus pagination clauses, with @riffle_enabled cleared so that
+        # the inner WHERE-by-IDs query (issued via this relation) does not
+        # recurse back into load_with_riffle.
+        def build_base_scope
+          scope = except(:limit, :offset)
+          scope.riffle_enabled = false
+          scope
         end
       end
     end
