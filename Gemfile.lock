@@ -63,6 +63,8 @@ GEM
       nokogiri (>= 1.12.0)
     minitest (6.0.1)
       prism (~> 1.5)
+    mock_redis (0.53.0)
+      redis (~> 5)
     nokogiri (1.19.0-aarch64-linux-gnu)
       racc (~> 1.4)
     nokogiri (1.19.0-aarch64-linux-musl)
@@ -158,6 +160,7 @@ PLATFORMS
 DEPENDENCIES
   activesupport (>= 6.0)
   bundler (>= 2.0)
+  mock_redis (~> 0.49)
   rake (>= 13.0)
   riffle!
   rspec (~> 3.0)
