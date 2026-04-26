@@ -7,6 +7,5 @@ module Riffle
     attribute :enabled
     attribute :cursor_id
     attribute :page
-    attribute :per
   end
 end
