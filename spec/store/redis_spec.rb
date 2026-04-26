@@ -256,6 +256,50 @@ RSpec.describe Riffle::Store::Redis do
     end
   end
 
+  describe "#remove_ids_and_decrement" do
+    before { store.store(cursor_id, ids, total_count: 100) }
+
+    it "returns the number of IDs actually removed" do
+      removed = store.remove_ids_and_decrement(cursor_id, [3, 5])
+      expect(removed).to eq(2)
+    end
+
+    it "decrements total_count by the actual removed count, not the input size" do
+      # First call removes 3 and 5
+      store.remove_ids_and_decrement(cursor_id, [3, 5])
+      expect(store.total_count(cursor_id)).to eq(98)
+
+      # Simulating a second concurrent request that tries to remove the same
+      # IDs again. ZREM returns 0, so no further decrement happens — guarding
+      # against the double-decrement race in issue #008.
+      removed_again = store.remove_ids_and_decrement(cursor_id, [3, 5])
+      expect(removed_again).to eq(0)
+      expect(store.total_count(cursor_id)).to eq(98)
+    end
+
+    it "decrements stored_count by the same amount" do
+      store.remove_ids_and_decrement(cursor_id, [3, 5])
+      expect(store.stored_count(cursor_id)).to eq(8)
+    end
+
+    it "returns 0 and is a no-op for an empty input list" do
+      expect(store.remove_ids_and_decrement(cursor_id, [])).to eq(0)
+      expect(store.total_count(cursor_id)).to eq(100)
+    end
+
+    it "returns 0 when none of the given IDs exist in the cache" do
+      removed = store.remove_ids_and_decrement(cursor_id, [9999, 8888])
+      expect(removed).to eq(0)
+      expect(store.total_count(cursor_id)).to eq(100)
+    end
+
+    it "removes only the IDs that exist when input partially overlaps cache" do
+      removed = store.remove_ids_and_decrement(cursor_id, [3, 9999])
+      expect(removed).to eq(1)
+      expect(store.total_count(cursor_id)).to eq(99)
+    end
+  end
+
   describe "Redis Cluster compatibility (hash-tagged keys)" do
     it "wraps cursor_id in {} so ids/meta land in the same Cluster slot" do
       store.store(cursor_id, ids, total_count: 100)

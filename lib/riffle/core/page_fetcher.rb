@@ -108,9 +108,10 @@ module Riffle
           deleted_ids = ids.reject { |id| fetched_id_strs.include?(id.to_s) }
 
           if deleted_ids.any?
-            # キャッシュから削除されたIDを除去
-            @store.remove_ids(@snapshot.cursor_id, deleted_ids)
-            @store.decrement_total_count(@snapshot.cursor_id, deleted_ids.size)
+            # キャッシュから削除されたIDを除去 + total_count/stored_count を
+            # 「実際に削除された数」だけデクリメント。並行リクエスト下での
+            # 二重デクリメントを避け、HINCRBY ペアもアトミックに揃える。
+            @store.remove_ids_and_decrement(@snapshot.cursor_id, deleted_ids)
 
             # 次回は倍の件数を取得（連続削除に対応）
             fetch_size = [fetch_size * 2, 1000].min

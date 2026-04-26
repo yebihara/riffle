@@ -19,7 +19,11 @@ module Riffle
           handle_truncation!(cursor_id, ids.size, max_ids)
         end
 
-        stored_ids = ids.take(max_ids)
+        # Dedup to match Redis Sorted Set semantics (members are unique by
+        # value). pluck(primary_key) on a real PK column already returns
+        # unique values, so this is a no-op in production. It matters only
+        # for tests that intentionally pass duplicate IDs.
+        stored_ids = ids.take(max_ids).uniq
         ttl = effective_ttl
 
         log(:info) do
@@ -125,9 +129,39 @@ module Riffle
         return 0 if data.nil?
 
         data[:total_count] -= count
+        data[:stored_count] -= count
         log(:info) { "[Riffle::Memory] DECR_COUNT cursor_id=#{cursor_id} by=#{count} new_total=#{data[:total_count]}" }
 
         data[:total_count]
+      end
+
+      # See Store::Base#remove_ids_and_decrement for rationale.
+      # Matches Redis ZREM semantics: each unique input ID removes at most
+      # one cache element.
+      def remove_ids_and_decrement(cursor_id, ids)
+        return 0 if ids.empty?
+
+        data = @data[cursor_id]
+        return 0 if data.nil?
+
+        removed = 0
+        ids.uniq.each do |id|
+          idx = data[:ids].index(id)
+          if idx
+            data[:ids].delete_at(idx)
+            removed += 1
+          end
+        end
+
+        if removed > 0
+          data[:stored_count] = data[:ids].size
+          data[:total_count] -= removed
+          log(:info) do
+            "[Riffle::Memory] REMOVE_IDS+DECR cursor_id=#{cursor_id} removed=#{removed} new_total=#{data[:total_count]}"
+          end
+        end
+
+        removed
       end
 
       # Test helper: clear all data

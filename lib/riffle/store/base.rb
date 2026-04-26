@@ -65,6 +65,20 @@ module Riffle
         raise NotImplementedError
       end
 
+      # Atomic combination of remove_ids + decrement_total_count.
+      #
+      # Removes the given IDs from the cached set and decrements
+      # total_count / stored_count by the *actually removed* count, not by
+      # ids.size. This avoids double-decrement when concurrent backfill
+      # requests both detect the same deletions.
+      #
+      # @param cursor_id [String]
+      # @param ids [Array] IDs to remove
+      # @return [Integer] number of IDs actually removed
+      def remove_ids_and_decrement(cursor_id, ids)
+        raise NotImplementedError
+      end
+
       # Whether the stored ID list was capped at max_ids at create time.
       # When true, the cached snapshot represents only the first max_ids
       # records of the search result; pages beyond that will be empty.

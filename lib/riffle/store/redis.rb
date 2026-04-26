@@ -156,6 +156,41 @@ module Riffle
         new_count
       end
 
+      # Single combined operation used by PageFetcher's backfill path.
+      #
+      # Two issues this addresses:
+      #   1. Concurrent requests that both detect the same deletions would
+      #      each decrement by ids.size, producing a double-decrement. Here
+      #      we decrement by the *actual* ZREM return value, so a concurrent
+      #      caller whose ZREM returns 0 contributes nothing to the count.
+      #   2. The pair of HINCRBY calls is wrapped in MULTI so total_count
+      #      and stored_count cannot fall out of sync mid-update.
+      #
+      # The ZREM and the HINCRBY MULTI are still two separate round trips,
+      # which leaves a narrow window where a crash between them would leave
+      # counts stale until cursor expiration. Closing that gap requires Lua
+      # (deferred — see backlog).
+      def remove_ids_and_decrement(cursor_id, ids)
+        return 0 if ids.empty?
+
+        ids_key = ids_key(cursor_id)
+        meta_key = meta_key(cursor_id)
+
+        log(:info) { "[Riffle] ZREM cursor_id=#{cursor_id} ids=#{ids.inspect}" }
+        zrem_result = redis.zrem(ids_key, ids)
+        removed = zrem_result.is_a?(Integer) ? zrem_result : (zrem_result ? ids.size : 0)
+
+        if removed > 0
+          redis.multi do |multi|
+            multi.hincrby(meta_key, "total_count", -removed)
+            multi.hincrby(meta_key, "stored_count", -removed)
+          end
+          log(:info) { "[Riffle] DECR_COUNT cursor_id=#{cursor_id} by=#{removed}" }
+        end
+
+        removed
+      end
+
       private
 
       def redis
