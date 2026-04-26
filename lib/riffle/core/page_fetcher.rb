@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "active_support/notifications"
+
 module Riffle
   module Core
     class PageFetcher
@@ -71,20 +73,31 @@ module Riffle
         end
         offset = (page - 1) * per_page
 
-        # fetch_with_backfill returns the records plus the latest meta reading
-        # that came back with the page IDs (single round trip on Redis), so we
-        # don't need to issue a separate total_count / truncated? round trip
-        # for the Result construction.
-        backfill = fetch_with_backfill(offset: offset, limit: per_page)
-
-        Result.new(
-          records: backfill[:records],
-          total_count: backfill[:total_count],
+        ActiveSupport::Notifications.instrument(
+          "page_fetched.riffle",
           cursor_id: @snapshot.cursor_id,
           page: page,
-          per_page: per_page,
-          truncated: backfill[:truncated]
-        )
+          per_page: per_page
+        ) do |payload|
+          # fetch_with_backfill returns records + the latest meta reading that
+          # came back with the page IDs (single round trip on Redis), so we
+          # don't issue a separate total_count / truncated? round trip for
+          # the Result.
+          backfill = fetch_with_backfill(offset: offset, limit: per_page)
+
+          payload[:fetched_count] = backfill[:records].size
+          payload[:total_count]   = backfill[:total_count]
+          payload[:truncated]     = backfill[:truncated]
+
+          Result.new(
+            records: backfill[:records],
+            total_count: backfill[:total_count],
+            cursor_id: @snapshot.cursor_id,
+            page: page,
+            per_page: per_page,
+            truncated: backfill[:truncated]
+          )
+        end
       end
 
       private
@@ -123,7 +136,15 @@ module Riffle
             # キャッシュから削除されたIDを除去 + total_count/stored_count を
             # 「実際に削除された数」だけデクリメント。並行リクエスト下での
             # 二重デクリメントを避け、HINCRBY ペアもアトミックに揃える。
-            removed = @store.remove_ids_and_decrement(@snapshot.cursor_id, deleted_ids)
+            removed = ActiveSupport::Notifications.instrument(
+              "backfill_triggered.riffle",
+              cursor_id: @snapshot.cursor_id,
+              deleted_ids_count: deleted_ids.size
+            ) do |payload|
+              n = @store.remove_ids_and_decrement(@snapshot.cursor_id, deleted_ids)
+              payload[:removed_count] = n
+              n
+            end
             total_count -= removed if total_count && removed > 0
 
             # 次回は倍の件数を取得（連続削除に対応）

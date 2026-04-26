@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "active_support/notifications"
 
 module Riffle
   module Core
@@ -22,7 +23,14 @@ module Riffle
           total_count ||= ids.size
           cursor_id = generate_id
 
-          store.store(cursor_id, ids, total_count: total_count)
+          ActiveSupport::Notifications.instrument(
+            "cursor_created.riffle",
+            cursor_id: cursor_id,
+            total_count: total_count,
+            requested_ids_count: ids.size
+          ) do
+            store.store(cursor_id, ids, total_count: total_count)
+          end
 
           new(cursor_id)
         end

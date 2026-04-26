@@ -301,6 +301,26 @@ Riffleは1カーソルあたり2つのキー（`riffle:{CURSOR_ID}:ids` と
 `{CURSOR_ID}` ハッシュタグにより両キーが必ず同一スロットに配置されるため、
 Cluster構成でもCROSSSLOTエラーになりません。
 
+### インストルメンテーション
+
+Riffle は `ActiveSupport::Notifications` イベントを発行します。
+APM・StatsD・ロガーなど任意の計測基盤に、モンキーパッチなしで接続できます。
+
+| イベント名 | 発火タイミング | payload |
+|---|---|---|
+| `cursor_created.riffle` | `Cursor.create` が新しいスナップショットを作成した時 | `cursor_id`, `total_count`, `requested_ids_count` |
+| `page_fetched.riffle` | `PageFetcher#fetch` がページを返した時 | `cursor_id`, `page`, `per_page`, `fetched_count`, `total_count`, `truncated` |
+| `backfill_triggered.riffle` | ページ取得中にDB側で削除されたレコードを検知し、キャッシュ側を補正した時 | `cursor_id`, `deleted_ids_count`, `removed_count` |
+
+標準の ActiveSupport API で subscribe:
+
+```ruby
+ActiveSupport::Notifications.subscribe(/\.riffle\z/) do |*args|
+  event = ActiveSupport::Notifications::Event.new(*args)
+  StatsD.timing("riffle.#{event.name.split('.').first}", event.duration)
+end
+```
+
 ### 運用上の注意
 
 Riffle は Redis を「あれば速くなるキャッシュ」ではなく**必須インフラ**として扱います。

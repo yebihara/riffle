@@ -306,6 +306,26 @@ Riffle uses two Redis keys per cursor (`riffle:{CURSOR_ID}:ids` and
 `{CURSOR_ID}` hash tag ensures both keys hash to the same Cluster slot,
 so MULTI does not raise CROSSSLOT.
 
+### Instrumentation
+
+Riffle emits `ActiveSupport::Notifications` events so you can wire it
+into your APM, StatsD, or logger of choice without monkey-patching.
+
+| Event | Fired when | Payload |
+|---|---|---|
+| `cursor_created.riffle` | `Cursor.create` materializes a new snapshot | `cursor_id`, `total_count`, `requested_ids_count` |
+| `page_fetched.riffle` | `PageFetcher#fetch` returns a page | `cursor_id`, `page`, `per_page`, `fetched_count`, `total_count`, `truncated` |
+| `backfill_triggered.riffle` | A page lookup detects rows deleted from the DB and the cache compensates | `cursor_id`, `deleted_ids_count`, `removed_count` |
+
+Subscribe with the standard ActiveSupport API:
+
+```ruby
+ActiveSupport::Notifications.subscribe(/\.riffle\z/) do |*args|
+  event = ActiveSupport::Notifications::Event.new(*args)
+  StatsD.timing("riffle.#{event.name.split('.').first}", event.duration)
+end
+```
+
 ### Operational Considerations
 
 Riffle treats Redis as a hard dependency, not an optional cache. A
