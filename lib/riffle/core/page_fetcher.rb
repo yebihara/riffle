@@ -29,9 +29,25 @@ module Riffle
         end
       end
 
-      def initialize(snapshot:, model_class:, store: nil)
+      # Initialize a PageFetcher.
+      #
+      # Pass `relation:` (an ActiveRecord::Relation) when you want includes /
+      # joins / select / additional where clauses to be preserved across page
+      # navigation. Pass `model_class:` (a class) for the legacy behavior of
+      # querying with no scope.
+      #
+      # @param snapshot [Snapshot]
+      # @param relation [ActiveRecord::Relation, nil] preferred when scope matters
+      # @param model_class [Class, nil] legacy; bare model class
+      # @param store [Store::Base, nil]
+      def initialize(snapshot:, relation: nil, model_class: nil, store: nil)
+        if relation.nil? && model_class.nil?
+          raise ArgumentError, "Either relation: or model_class: must be provided"
+        end
+
         @snapshot = snapshot
-        @model_class = model_class
+        @relation = relation
+        @model_class = relation ? relation.klass : model_class
         @store = store || Riffle.store
       end
 
@@ -63,6 +79,7 @@ module Riffle
         remaining = limit
         fetch_size = limit
         max_attempts = 20 # 無限ループ防止（倍々で増やすので多めに）
+        pk = @model_class.primary_key
 
         max_attempts.times do
           break if remaining <= 0
@@ -73,9 +90,10 @@ module Riffle
           fetched = fetch_records_by_ids(ids)
           records.concat(fetched)
 
-          # 削除されたIDを検出
-          fetched_ids = fetched.map(&:id)
-          deleted_ids = ids - fetched_ids
+          # 削除されたIDを検出。Redis store は String、Memory store は元の型のまま
+          # ID を返すので、両者を文字列化してから比較する。
+          fetched_id_strs = fetched.map { |r| r.public_send(pk).to_s }
+          deleted_ids = ids.reject { |id| fetched_id_strs.include?(id.to_s) }
 
           if deleted_ids.any?
             # キャッシュから削除されたIDを除去
@@ -100,7 +118,12 @@ module Riffle
         return [] if ids.empty?
 
         pk = @model_class.primary_key
-        records = @model_class.where(pk => ids).to_a
+        # Use the original relation when provided so that includes / joins /
+        # select / additional where clauses applied at search time are
+        # preserved across page navigation. Falls back to the bare model class
+        # for legacy callers passing model_class:.
+        source = @relation || @model_class
+        records = source.where(pk => ids).to_a
         # Stringify on both sides: Redis store returns string IDs, Memory store
         # preserves whatever was stored. Normalizing to strings keeps the order
         # lookup correct across PK types (integer / UUID / etc).

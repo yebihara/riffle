@@ -215,16 +215,18 @@ The frontend sends `?cursor_id=xxx&page=2` for subsequent requests.
 You can use the Core API directly:
 
 ```ruby
-# Create cursor
-ids = User.order(:name).pluck(:id)
+# Create cursor (use the model's primary_key, not :id, to support UUIDs)
+base_scope = User.includes(:profile).order(:name)
+ids = base_scope.pluck(User.primary_key)
 cursor = Riffle::Core::Cursor.create(ids, total_count: ids.size)
 
 # Find cursor
 cursor = Riffle::Core::Cursor.find(cursor_id)
 
-# Fetch page from snapshot
+# Fetch page from snapshot. Pass the relation (preferred) so includes /
+# joins / select are preserved when fetching the actual records.
 snapshot = Riffle::Core::Snapshot.new(cursor)
-fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: User)
+fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope)
 result = fetcher.fetch(page: 2, per_page: 20)
 
 result.records      # => [User, User, ...]

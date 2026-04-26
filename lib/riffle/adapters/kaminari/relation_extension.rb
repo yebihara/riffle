@@ -48,8 +48,9 @@ module Riffle
         end
 
         def load_from_cursor(cursor, page_num, per_page, store)
+          base_scope = except(:limit, :offset)
           snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: klass, store: store)
+          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
           result = fetcher.fetch(page: page_num, per_page: per_page)
 
           @riffle_total_count = result.total_count
@@ -68,7 +69,7 @@ module Riffle
           @total_count = total  # Kaminari用
 
           snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: klass, store: store)
+          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
           result = fetcher.fetch(page: page_num, per_page: per_page)
 
           result.records

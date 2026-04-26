@@ -18,10 +18,12 @@ module Riffle
 
           cursor = Riffle::Core::Cursor.find(cursor_id, store: store) if cursor_id.present?
 
+          base_scope = collection.except(:limit, :offset)
+
           if cursor
-            result = fetch_from_cursor(cursor, collection.klass, page, items, store)
+            result = fetch_from_cursor(cursor, base_scope, page, items, store)
           else
-            result = fetch_with_new_cursor(collection, page, items, store)
+            result = fetch_with_new_cursor(base_scope, page, items, store)
           end
 
           pagy = ::Pagy.new(
@@ -45,9 +47,9 @@ module Riffle
           vars
         end
 
-        def fetch_from_cursor(cursor, model_class, page, items, store)
+        def fetch_from_cursor(cursor, base_scope, page, items, store)
           snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: model_class, store: store)
+          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
           result = fetcher.fetch(page: page, per_page: items)
 
           {
@@ -57,15 +59,14 @@ module Riffle
           }
         end
 
-        def fetch_with_new_cursor(collection, page, items, store)
-          base_scope = collection.except(:limit, :offset)
+        def fetch_with_new_cursor(base_scope, page, items, store)
           all_ids = base_scope.pluck(base_scope.klass.primary_key)
           total = all_ids.size
 
           cursor = Riffle::Core::Cursor.create(all_ids, total_count: total, store: store)
 
           snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: collection.klass, store: store)
+          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
           result = fetcher.fetch(page: page, per_page: items)
 
           {

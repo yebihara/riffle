@@ -159,6 +159,31 @@ RSpec.describe Riffle::Core::PageFetcher do
       expect(remaining_ids).not_to include(1)
       expect(remaining_ids).not_to include(4)
     end
+
+    context "when store returns string IDs but records have integer PK" do
+      # Simulates the Redis store path: cache holds string IDs, but the model's
+      # primary key is an integer column. Comparing fetched_ids (Integer) to
+      # cached ids (String) directly would always look "all deleted".
+      let(:string_ids) { %w[3 1 4 1 5 9 2 6 5 3] }
+      let(:string_cursor) { Riffle::Core::Cursor.create(string_ids, total_count: 10, store: store) }
+      let(:string_snapshot) { Riffle::Core::Snapshot.new(string_cursor, store: store) }
+      let(:string_fetcher) do
+        described_class.new(snapshot: string_snapshot, model_class: model_with_deleted, store: store)
+      end
+
+      it "detects deletions correctly across String/Integer mismatch" do
+        result = string_fetcher.fetch(page: 1, per_page: 3)
+        # 1 and 4 are deleted; backfill should still produce 3 records.
+        expect(result.records.size).to eq(3)
+        expect(result.records.map(&:id)).not_to include(1, 4)
+      end
+
+      it "decrements total_count by exactly the deleted count, not the whole page" do
+        string_fetcher.fetch(page: 1, per_page: 3)
+        # original 10 minus deleted [1, 4] = 8
+        expect(store.total_count(string_cursor.id)).to eq(8)
+      end
+    end
   end
 
   describe "with custom primary key (e.g. UUID)" do
@@ -198,6 +223,57 @@ RSpec.describe Riffle::Core::PageFetcher do
       # MockUuidRelation reverses order to simulate DB returning rows out of order
       result = uuid_fetcher.fetch(page: 1, per_page: 3)
       expect(result.records.map(&:uuid)).to eq(uuid_ids) # original cache order preserved
+    end
+  end
+
+  describe "scope preservation via relation:" do
+    # A relation-like double that records every where(...) call so we can
+    # verify the relation (not the bare model class) is used for queries.
+    let(:where_calls) { [] }
+    let(:scoped_relation) do
+      relation_klass = Class.new do
+        def initialize(model_class, calls)
+          @model_class = model_class
+          @calls = calls
+        end
+
+        def klass
+          @model_class
+        end
+
+        def where(conditions)
+          @calls << conditions
+          @model_class.where(conditions)
+        end
+      end
+      relation_klass.new(model_class, where_calls)
+    end
+
+    let(:scoped_fetcher) do
+      described_class.new(snapshot: snapshot, relation: scoped_relation, store: store)
+    end
+
+    it "queries through the relation, not the bare model class" do
+      scoped_fetcher.fetch(page: 1, per_page: 3)
+      expect(where_calls).not_to be_empty
+    end
+
+    it "passes the primary_key when calling where" do
+      scoped_fetcher.fetch(page: 1, per_page: 3)
+      condition = where_calls.first
+      expect(condition.keys.first.to_s).to eq("id")
+    end
+
+    it "raises ArgumentError when neither relation: nor model_class: is given" do
+      expect {
+        described_class.new(snapshot: snapshot, store: store)
+      }.to raise_error(ArgumentError, /relation:.*model_class:/)
+    end
+
+    it "derives model_class from relation.klass" do
+      fetcher = described_class.new(snapshot: snapshot, relation: scoped_relation, store: store)
+      result = fetcher.fetch(page: 1, per_page: 3)
+      expect(result.records.size).to eq(3)
     end
   end
 
@@ -257,8 +333,10 @@ class MockRelationWithDeleted
   end
 
   def to_a
-    @ids.reject { |id| @deleted_ids.include?(id) }
-        .uniq
-        .map { |id| OpenStruct.new(id: id) }
+    # Simulate ActiveRecord casting String IDs to Integer for integer PK columns.
+    cast_ids = @ids.map { |id| id.is_a?(String) ? id.to_i : id }
+    cast_ids.reject { |id| @deleted_ids.include?(id) }
+            .uniq
+            .map { |id| OpenStruct.new(id: id) }
   end
 end

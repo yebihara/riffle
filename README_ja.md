@@ -215,16 +215,18 @@ end
 直接コアAPIを使用することも可能:
 
 ```ruby
-# カーソル作成
-ids = User.order(:name).pluck(:id)
+# カーソル作成（UUIDなどに対応するため :id ではなく primary_key を使う）
+base_scope = User.includes(:profile).order(:name)
+ids = base_scope.pluck(User.primary_key)
 cursor = Riffle::Core::Cursor.create(ids, total_count: ids.size)
 
 # カーソル検索
 cursor = Riffle::Core::Cursor.find(cursor_id)
 
-# スナップショットからページ取得
+# スナップショットからページ取得。relation: を渡すと includes / joins /
+# select 等のスコープがページ取得時にも保持される（推奨）。
 snapshot = Riffle::Core::Snapshot.new(cursor)
-fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: User)
+fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope)
 result = fetcher.fetch(page: 2, per_page: 20)
 
 result.records      # => [User, User, ...]
