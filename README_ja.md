@@ -233,6 +233,23 @@ Riffleは1カーソルあたり2つのキー（`riffle:{CURSOR_ID}:ids` と
 `{CURSOR_ID}` ハッシュタグにより両キーが必ず同一スロットに配置されるため、
 Cluster構成でもCROSSSLOTエラーになりません。
 
+### 運用上の注意
+
+Riffle は Redis を「あれば速くなるキャッシュ」ではなく**必須インフラ**として扱います。
+Redis に障害が起きるとページネーションエンドポイントは例外を投げます。
+スナップショット性を保証するため、サイレントにDB OFFSETへフォールバックする
+仕組みは意図的に持たせていません。
+
+推奨される運用構成:
+
+- Redis を HA 構成（Sentinel または Cluster）で運用する
+- Redis 障害時にもページ描画を継続したい場合は、`pagy_riffle` /
+  `User.page` の周りにアプリ側でサーキットブレーカーを設置する
+- Redis 接続のヘルスチェック、および truncation / cursor 期限切れの
+  WARN ログを監視し、容量問題を早期に検知する
+- Sidekiq 等と Redis を共有する場合は、riffle 専用の論理DBに分離することで
+  eviction policy がカーソルを途中で削除する事故を防ぐ
+
 ### コアAPI
 
 直接コアAPIを使用することも可能:

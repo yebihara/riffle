@@ -234,6 +234,24 @@ Riffle uses two Redis keys per cursor (`riffle:{CURSOR_ID}:ids` and
 `{CURSOR_ID}` hash tag ensures both keys hash to the same Cluster slot,
 so MULTI does not raise CROSSSLOT.
 
+### Operational Considerations
+
+Riffle treats Redis as a hard dependency, not an optional cache. A
+Redis outage will surface as exceptions on paginated endpoints — the
+gem does not silently fall back to a database OFFSET path, because
+that would break the snapshot semantics it promises.
+
+Recommended operational setup:
+
+- Run Redis in a high-availability configuration (Sentinel or Cluster)
+- Add a circuit breaker around `pagy_riffle` / `User.page` if you need
+  page rendering to degrade gracefully under a Redis outage
+- Monitor Redis connection health and the truncation / cursor-expiration
+  WARN logs to catch capacity issues early
+- Consider isolating Riffle to a dedicated Redis logical DB if you
+  share a Redis instance with Sidekiq or other workloads, so that
+  eviction policies cannot evict cursors mid-pagination
+
 ### Core API
 
 You can use the Core API directly:
