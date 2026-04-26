@@ -1,6 +1,6 @@
-# Chikuden
+# Riffle
 
-Chikudenは、ページネーションのためのカーソルベースキャッシュgemです。Redisとの併用を想定し、Redis Sorted Set操作に最適化された設計により、繰り返しの`COUNT(*)`や`LIMIT/OFFSET`クエリを排除します。Redisなしでも動作するインメモリストアをテスト用に提供しています。
+Riffleは、ページネーションのためのカーソルベースキャッシュgemです。Redisとの併用を想定し、Redis Sorted Set操作に最適化された設計により、繰り返しの`COUNT(*)`や`LIMIT/OFFSET`クエリを排除します。Redisなしでも動作するインメモリストアをテスト用に提供しています。
 
 KaminariとPagyの両方に対応しています。
 
@@ -12,7 +12,7 @@ KaminariとPagyの両方に対応しています。
 ┌─────────────────────────────────────┐
 │  kaminari adapter / pagy adapter    │  ← アダプタ層
 ├─────────────────────────────────────┤
-│         chikuden (core)             │  ← コアAPI層
+│         riffle (core)             │  ← コアAPI層
 ├─────────────────────────────────────┤
 │         Redis Sorted Set            │  ← ストレージ層
 └─────────────────────────────────────┘
@@ -27,7 +27,7 @@ KaminariとPagyの両方に対応しています。
 Gemfileに追加:
 
 ```ruby
-gem 'chikuden'
+gem 'riffle'
 ```
 
 bundle install:
@@ -38,10 +38,10 @@ $ bundle install
 
 ## 設定
 
-`config/initializers/chikuden.rb` を作成:
+`config/initializers/riffle.rb` を作成:
 
 ```ruby
-Chikuden.configure do |config|
+Riffle.configure do |config|
   # Redis接続（必須）
   config.redis = Redis.new(url: ENV['REDIS_URL'])
 
@@ -54,6 +54,9 @@ Chikuden.configure do |config|
   # カーソルパラメータ名（デフォルト: :cursor_id）
   config.cursor_param = :cursor_id
 
+  # Redisキープレフィックス（デフォルト: "riffle"）
+  config.redis_key_prefix = "riffle"
+
   # ログ出力（デフォルト: Rails.logger）
   # config.logger = Rails.logger
 end
@@ -64,37 +67,37 @@ end
 `config.logger` を設定すると、ストア操作のログが出力されます（INFOレベル）。
 
 ```ruby
-Chikuden.configure do |config|
+Riffle.configure do |config|
   config.logger = Rails.logger
 end
 ```
 
 **Redis使用時の出力例:**
 ```
-[Chikuden] STORE cursor_id=abc123 ids_count=1000 total_count=1000 ttl=1800s
-[Chikuden] ZADD chikuden:abc123:ids (1000 members)
-[Chikuden] EXISTS cursor_id=abc123 result=true
-[Chikuden] ZRANGE chikuden:abc123:ids 0 19
-[Chikuden] FETCH cursor_id=abc123 offset=0 limit=20 fetched=20
+[Riffle] STORE cursor_id=abc123 ids_count=1000 total_count=1000 ttl=1800s
+[Riffle] ZADD riffle:abc123:ids (1000 members)
+[Riffle] EXISTS cursor_id=abc123 result=true
+[Riffle] ZRANGE riffle:abc123:ids 0 19
+[Riffle] FETCH cursor_id=abc123 offset=0 limit=20 fetched=20
 ```
 
 **Memoryストア使用時の出力例:**
 ```
-[Chikuden::Memory] STORE cursor_id=abc123 ids_count=1000 total_count=1000 ttl=1800s
-[Chikuden::Memory] EXISTS cursor_id=abc123 result=true
-[Chikuden::Memory] FETCH cursor_id=abc123 offset=0 limit=20 fetched=20
+[Riffle::Memory] STORE cursor_id=abc123 ids_count=1000 total_count=1000 ttl=1800s
+[Riffle::Memory] EXISTS cursor_id=abc123 result=true
+[Riffle::Memory] FETCH cursor_id=abc123 offset=0 limit=20 fetched=20
 ```
 
 ## 使い方
 
 ### Kaminariの場合
 
-コントローラーで `chikuden` マクロを使用:
+コントローラーで `riffle` マクロを使用:
 
 ```ruby
 class UsersController < ApplicationController
-  # 指定アクションでChikudenを有効化
-  chikuden only: [:index]
+  # 指定アクションでRiffleを有効化
+  riffle only: [:index]
 
   def index
     @users = User.order(:name).page(params[:page]).per(20)
@@ -112,14 +115,14 @@ end
 
 ### Pagyの場合
 
-コントローラーで `pagy_chikuden` メソッドを使用:
+コントローラーで `pagy_riffle` メソッドを使用:
 
 ```ruby
 class UsersController < ApplicationController
   include Pagy::Backend
 
   def index
-    @pagy, @users = pagy_chikuden(User.order(:name))
+    @pagy, @users = pagy_riffle(User.order(:name))
   end
 end
 ```
@@ -135,14 +138,14 @@ end
 #### cursor_idの取得
 
 ```erb
-<%= chikuden_cursor_id(@users) %>
+<%= riffle_cursor_id(@users) %>
 ```
 
 #### フォーム用hidden field
 
 ```erb
 <%= form_with url: users_path do |f| %>
-  <%= chikuden_cursor_field(@users) %>
+  <%= riffle_cursor_field(@users) %>
   <!-- フォームの内容 -->
 <% end %>
 ```
@@ -150,12 +153,12 @@ end
 #### cursor_id付きパス生成
 
 ```erb
-<%= chikuden_path(users_path, @users, page: 2) %>
+<%= riffle_path(users_path, @users, page: 2) %>
 ```
 
 ## 削除されたレコードの扱い
 
-ページネーション中にレコードが削除された場合、Chikudenは自動的に対応します：
+ページネーション中にレコードが削除された場合、Riffleは自動的に対応します：
 
 1. キャッシュされたIDでレコードを取得
 2. 削除されたレコードを検知
@@ -167,15 +170,15 @@ end
 
 ```
 # ログ出力例
-[Chikuden::Memory] FETCH cursor_id=xxx offset=20 limit=10 fetched=10
-[Chikuden::Memory] REMOVE_IDS cursor_id=xxx ids=[42, 57]
-[Chikuden::Memory] DECR_COUNT cursor_id=xxx by=2 new_total=198
-[Chikuden::Memory] FETCH cursor_id=xxx offset=30 limit=2 fetched=2
+[Riffle::Memory] FETCH cursor_id=xxx offset=20 limit=10 fetched=10
+[Riffle::Memory] REMOVE_IDS cursor_id=xxx ids=[42, 57]
+[Riffle::Memory] DECR_COUNT cursor_id=xxx by=2 new_total=198
+[Riffle::Memory] FETCH cursor_id=xxx offset=30 limit=2 fetched=2
 ```
 
 ## API/JSONレスポンス
 
-Chikudenは既存のKaminari/Pagyのシリアライズ機能と組み合わせて使用できます。`cursor_id`をレスポンスに含めるだけです。
+Riffleは既存のKaminari/Pagyのシリアライズ機能と組み合わせて使用できます。`cursor_id`をレスポンスに含めるだけです。
 
 ```ruby
 # コントローラー
@@ -188,7 +191,7 @@ def index
       current_page: @users.current_page,
       total_pages: @users.total_pages,
       total_count: @users.total_count,
-      cursor_id: @users.chikuden_cursor_id
+      cursor_id: @users.riffle_cursor_id
     }
   }
 end
@@ -214,14 +217,14 @@ end
 ```ruby
 # カーソル作成
 ids = User.order(:name).pluck(:id)
-cursor = Chikuden::Core::Cursor.create(ids, total_count: ids.size)
+cursor = Riffle::Core::Cursor.create(ids, total_count: ids.size)
 
 # カーソル検索
-cursor = Chikuden::Core::Cursor.find(cursor_id)
+cursor = Riffle::Core::Cursor.find(cursor_id)
 
 # スナップショットからページ取得
-snapshot = Chikuden::Core::Snapshot.new(cursor)
-fetcher = Chikuden::Core::PageFetcher.new(snapshot: snapshot, model_class: User)
+snapshot = Riffle::Core::Snapshot.new(cursor)
+fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, model_class: User)
 result = fetcher.fetch(page: 2, per_page: 20)
 
 result.records      # => [User, User, ...]
@@ -240,7 +243,7 @@ result.total_pages  # => 50
 
 ### 認可について
 
-Chikudenはレコードの認可チェックを行いません。認可はアプリケーション側の責務です。
+Riffleはレコードの認可チェックを行いません。認可はアプリケーション側の責務です。
 
 ```ruby
 # 例: 認可スコープを適用してからページネーション
@@ -255,7 +258,7 @@ Chikudenはレコードの認可チェックを行いません。認可はアプ
 - 必要に応じてログ出力を無効化してください
 
 ```ruby
-Chikuden.configure do |config|
+Riffle.configure do |config|
   config.ttl = 5 * 60  # 5分
   config.logger = nil  # ログ無効化
 end
@@ -267,11 +270,11 @@ end
 
 ```ruby
 # spec/spec_helper.rb または test/test_helper.rb
-Chikuden.store = Chikuden::Store::Memory.new
+Riffle.store = Riffle::Store::Memory.new
 
 RSpec.configure do |config|
   config.before(:each) do
-    Chikuden.store.clear
+    Riffle.store.clear
   end
 end
 ```

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Chikuden
+module Riffle
   module Adapters
     module Kaminari
       module ControllerMethods
@@ -9,15 +9,15 @@ module Chikuden
         end
 
         module ClassMethods
-          # Enable Chikuden for specific actions
-          # @param enabled [Boolean] whether to enable chikuden
+          # Enable Riffle for specific actions
+          # @param enabled [Boolean] whether to enable riffle
           # @param options [Hash] options passed to before_action (:only, :except)
-          def chikuden(enabled = true, **options)
+          def riffle(enabled = true, **options)
             before_action(**options.slice(:only, :except)) do
-              cursor_param = Chikuden.config.cursor_param
-              Chikuden::Current.enabled = enabled
-              Chikuden::Current.cursor_id = params[cursor_param]
-              Chikuden::Current.page = params[:page]
+              cursor_param = Riffle.config.cursor_param
+              Riffle::Current.enabled = enabled
+              Riffle::Current.cursor_id = params[cursor_param]
+              Riffle::Current.page = params[:page]
             end
           end
         end

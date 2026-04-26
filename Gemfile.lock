@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    chikuden (0.1.0)
+    riffle (0.1.0)
       activesupport (>= 6.0)
       railties (>= 6.0)
       redis (>= 4.0)
@@ -158,8 +158,8 @@ PLATFORMS
 DEPENDENCIES
   activesupport (>= 6.0)
   bundler (>= 2.0)
-  chikuden!
   rake (>= 13.0)
+  riffle!
   rspec (~> 3.0)
 
 BUNDLED WITH

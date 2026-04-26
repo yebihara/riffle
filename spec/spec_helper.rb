@@ -3,10 +3,10 @@
 require "bundler/setup"
 require "active_support"
 require "active_support/current_attributes"
-require "chikuden"
+require "riffle"
 
 # Use memory store for testing
-Chikuden.store = Chikuden::Store::Memory.new
+Riffle.store = Riffle::Store::Memory.new
 
 RSpec.configure do |config|
   config.example_status_persistence_file_path = ".rspec_status"
@@ -17,7 +17,7 @@ RSpec.configure do |config|
   end
 
   config.before(:each) do
-    Chikuden.store.clear if Chikuden.store.respond_to?(:clear)
-    Chikuden::Current.reset
+    Riffle.store.clear if Riffle.store.respond_to?(:clear)
+    Riffle::Current.reset
   end
 end

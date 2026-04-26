@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Chikuden::Store::Memory do
+RSpec.describe Riffle::Store::Memory do
   let(:store) { described_class.new(ttl: 300, max_ids: 1000) }
   let(:cursor_id) { "test_cursor_123" }
   let(:ids) { [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
@@ -39,7 +39,7 @@ RSpec.describe Chikuden::Store::Memory do
     it "raises CursorExpired for non-existent cursor" do
       expect {
         store.fetch_page("nonexistent", offset: 0, limit: 3)
-      }.to raise_error(Chikuden::CursorExpired)
+      }.to raise_error(Riffle::CursorExpired)
     end
   end
 
@@ -53,7 +53,7 @@ RSpec.describe Chikuden::Store::Memory do
     it "raises CursorExpired for non-existent cursor" do
       expect {
         store.total_count("nonexistent")
-      }.to raise_error(Chikuden::CursorExpired)
+      }.to raise_error(Riffle::CursorExpired)
     end
   end
 

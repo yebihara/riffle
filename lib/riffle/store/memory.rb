@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Chikuden
+module Riffle
   module Store
     # In-memory store for testing purposes
     # Not thread-safe, not suitable for production use
@@ -17,7 +17,7 @@ module Chikuden
         ttl = effective_ttl
 
         log(:info) do
-          "[Chikuden::Memory] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s"
+          "[Riffle::Memory] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s"
         end
 
         @data[cursor_id] = {
@@ -39,7 +39,7 @@ module Chikuden
         result = data[:ids][offset, limit] || []
 
         log(:info) do
-          "[Chikuden::Memory] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{result.size}"
+          "[Riffle::Memory] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{result.size}"
         end
 
         result
@@ -51,7 +51,7 @@ module Chikuden
         data = @data[cursor_id]
         raise CursorExpired, "Cursor '#{cursor_id}' has expired" if data.nil?
 
-        log(:info) { "[Chikuden::Memory] TOTAL_COUNT cursor_id=#{cursor_id} count=#{data[:total_count]}" }
+        log(:info) { "[Riffle::Memory] TOTAL_COUNT cursor_id=#{cursor_id} count=#{data[:total_count]}" }
 
         data[:total_count]
       end
@@ -69,12 +69,12 @@ module Chikuden
         cleanup_expired
 
         result = @data.key?(cursor_id)
-        log(:info) { "[Chikuden::Memory] EXISTS cursor_id=#{cursor_id} result=#{result}" }
+        log(:info) { "[Riffle::Memory] EXISTS cursor_id=#{cursor_id} result=#{result}" }
         result
       end
 
       def delete(cursor_id)
-        log(:info) { "[Chikuden::Memory] DEL cursor_id=#{cursor_id}" }
+        log(:info) { "[Riffle::Memory] DEL cursor_id=#{cursor_id}" }
         !!@data.delete(cursor_id)
       end
 
@@ -82,7 +82,7 @@ module Chikuden
         return false unless @data.key?(cursor_id)
 
         ttl = effective_ttl
-        log(:info) { "[Chikuden::Memory] TOUCH cursor_id=#{cursor_id} ttl=#{ttl}s" }
+        log(:info) { "[Riffle::Memory] TOUCH cursor_id=#{cursor_id} ttl=#{ttl}s" }
 
         @data[cursor_id][:expires_at] = Time.now + ttl
         true
@@ -94,7 +94,7 @@ module Chikuden
         data = @data[cursor_id]
         return 0 if data.nil?
 
-        log(:info) { "[Chikuden::Memory] REMOVE_IDS cursor_id=#{cursor_id} ids=#{ids.inspect}" }
+        log(:info) { "[Riffle::Memory] REMOVE_IDS cursor_id=#{cursor_id} ids=#{ids.inspect}" }
 
         original_size = data[:ids].size
         data[:ids] = data[:ids] - ids
@@ -109,7 +109,7 @@ module Chikuden
         return 0 if data.nil?
 
         data[:total_count] -= count
-        log(:info) { "[Chikuden::Memory] DECR_COUNT cursor_id=#{cursor_id} by=#{count} new_total=#{data[:total_count]}" }
+        log(:info) { "[Riffle::Memory] DECR_COUNT cursor_id=#{cursor_id} by=#{count} new_total=#{data[:total_count]}" }
 
         data[:total_count]
       end
@@ -127,11 +127,11 @@ module Chikuden
       private
 
       def effective_ttl
-        @ttl || Chikuden.config.ttl
+        @ttl || Riffle.config.ttl
       end
 
       def effective_max_ids
-        @max_ids || Chikuden.config.max_ids
+        @max_ids || Riffle.config.max_ids
       end
 
       def cleanup_expired
@@ -140,7 +140,7 @@ module Chikuden
       end
 
       def log(level, &block)
-        logger = Chikuden.config.logger
+        logger = Riffle.config.logger
         return unless logger
 
         logger.public_send(level, &block)

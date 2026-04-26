@@ -2,11 +2,11 @@
 
 require "ostruct"
 
-RSpec.describe Chikuden::Core::PageFetcher do
-  let(:store) { Chikuden::Store::Memory.new(ttl: 300, max_ids: 1000) }
+RSpec.describe Riffle::Core::PageFetcher do
+  let(:store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 1000) }
   let(:ids) { [3, 1, 4, 1, 5, 9, 2, 6, 5, 3] }
-  let(:cursor) { Chikuden::Core::Cursor.create(ids, total_count: 10, store: store) }
-  let(:snapshot) { Chikuden::Core::Snapshot.new(cursor, store: store) }
+  let(:cursor) { Riffle::Core::Cursor.create(ids, total_count: 10, store: store) }
+  let(:snapshot) { Riffle::Core::Snapshot.new(cursor, store: store) }
 
   # Mock model class
   let(:model_class) do
@@ -41,7 +41,7 @@ RSpec.describe Chikuden::Core::PageFetcher do
     it "returns a Result struct" do
       result = fetcher.fetch(page: 1, per_page: 3)
 
-      expect(result).to be_a(Chikuden::Core::PageFetcher::Result)
+      expect(result).to be_a(Riffle::Core::PageFetcher::Result)
       expect(result.total_count).to eq(10)
       expect(result.cursor_id).to eq(cursor.id)
       expect(result.page).to eq(1)

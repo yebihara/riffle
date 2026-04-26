@@ -1,24 +1,24 @@
 # frozen_string_literal: true
 
-require "chikuden/version"
-require "chikuden/error"
-require "chikuden/configuration"
-require "chikuden/current"
+require "riffle/version"
+require "riffle/error"
+require "riffle/configuration"
+require "riffle/current"
 
 # Store
-require "chikuden/store/base"
-require "chikuden/store/redis"
-require "chikuden/store/memory"
+require "riffle/store/base"
+require "riffle/store/redis"
+require "riffle/store/memory"
 
 # Core
-require "chikuden/core/cursor"
-require "chikuden/core/snapshot"
-require "chikuden/core/page_fetcher"
+require "riffle/core/cursor"
+require "riffle/core/snapshot"
+require "riffle/core/page_fetcher"
 
 # Railtie (loads adapters conditionally)
-require "chikuden/railtie" if defined?(Rails)
+require "riffle/railtie" if defined?(Rails)
 
-module Chikuden
+module Riffle
   class << self
     def config
       @config ||= Configuration.new

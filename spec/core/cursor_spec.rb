@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-RSpec.describe Chikuden::Core::Cursor do
-  let(:store) { Chikuden::Store::Memory.new(ttl: 300, max_ids: 1000) }
+RSpec.describe Riffle::Core::Cursor do
+  let(:store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 1000) }
   let(:ids) { [1, 2, 3, 4, 5] }
 
   before do
-    Chikuden.store = store
+    Riffle.store = store
   end
 
   describe ".create" do
@@ -66,7 +66,7 @@ RSpec.describe Chikuden::Core::Cursor do
     it "raises CursorExpired for non-existent ID" do
       expect {
         described_class.find!("nonexistent", store: store)
-      }.to raise_error(Chikuden::CursorExpired)
+      }.to raise_error(Riffle::CursorExpired)
     end
   end
 

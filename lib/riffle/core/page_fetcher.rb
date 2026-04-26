@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Chikuden
+module Riffle
   module Core
     class PageFetcher
       Result = Struct.new(:records, :total_count, :cursor_id, :page, :per_page, keyword_init: true) do
@@ -32,7 +32,7 @@ module Chikuden
       def initialize(snapshot:, model_class:, store: nil)
         @snapshot = snapshot
         @model_class = model_class
-        @store = store || Chikuden.store
+        @store = store || Riffle.store
       end
 
       # Fetch records for a specific page

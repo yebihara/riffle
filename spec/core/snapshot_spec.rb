@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-RSpec.describe Chikuden::Core::Snapshot do
-  let(:store) { Chikuden::Store::Memory.new(ttl: 300, max_ids: 1000) }
+RSpec.describe Riffle::Core::Snapshot do
+  let(:store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 1000) }
   let(:ids) { (1..100).to_a }
-  let(:cursor) { Chikuden::Core::Cursor.create(ids, total_count: 100, store: store) }
+  let(:cursor) { Riffle::Core::Cursor.create(ids, total_count: 100, store: store) }
   let(:snapshot) { described_class.new(cursor, store: store) }
 
   describe "#page_ids" do

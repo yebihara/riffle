@@ -2,7 +2,7 @@
 
 require "securerandom"
 
-module Chikuden
+module Riffle
   module Core
     class Cursor
       attr_reader :id
@@ -15,7 +15,7 @@ module Chikuden
         # Create a new cursor and store IDs
         # @param ids [Array<Integer>] array of record IDs in order
         # @param total_count [Integer] total number of records (may be larger than ids.size)
-        # @param store [Chikuden::Store::Base] storage backend
+        # @param store [Riffle::Store::Base] storage backend
         # @return [Cursor]
         def create(ids, total_count: nil, store: nil)
           store ||= default_store
@@ -29,7 +29,7 @@ module Chikuden
 
         # Find an existing cursor
         # @param cursor_id [String] cursor identifier
-        # @param store [Chikuden::Store::Base] storage backend
+        # @param store [Riffle::Store::Base] storage backend
         # @return [Cursor, nil]
         def find(cursor_id, store: nil)
           return nil if cursor_id.nil? || cursor_id.empty?
@@ -42,7 +42,7 @@ module Chikuden
 
         # Find an existing cursor or raise
         # @param cursor_id [String] cursor identifier
-        # @param store [Chikuden::Store::Base] storage backend
+        # @param store [Riffle::Store::Base] storage backend
         # @return [Cursor]
         # @raise [CursorExpired]
         def find!(cursor_id, store: nil)
@@ -59,27 +59,27 @@ module Chikuden
         end
 
         def default_store
-          Chikuden.store
+          Riffle.store
         end
       end
 
       def exists?(store: nil)
-        store ||= Chikuden.store
+        store ||= Riffle.store
         store.exists?(@id)
       end
 
       def total_count(store: nil)
-        store ||= Chikuden.store
+        store ||= Riffle.store
         store.total_count(@id)
       end
 
       def delete(store: nil)
-        store ||= Chikuden.store
+        store ||= Riffle.store
         store.delete(@id)
       end
 
       def touch(store: nil)
-        store ||= Chikuden.store
+        store ||= Riffle.store
         store.touch(@id)
       end
     end

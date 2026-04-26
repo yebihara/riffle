@@ -2,17 +2,17 @@
 
 lib = File.expand_path("../lib", __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-require "chikuden/version"
+require "riffle/version"
 
 Gem::Specification.new do |spec|
-  spec.name          = "chikuden"
-  spec.version       = Chikuden::VERSION
+  spec.name          = "riffle"
+  spec.version       = Riffle::VERSION
   spec.authors       = ["EBIHARA, Yuichiro"]
   spec.email         = ["yuichiro.ebihara@gmail.com"]
 
   spec.summary       = "Cursor-based pagination cache using Redis Sorted Set"
-  spec.description   = "Chikuden caches paginated record IDs using Redis Sorted Set to eliminate repeated LIMIT/OFFSET queries. Works with Kaminari and Pagy."
-  spec.homepage      = "https://github.com/yebihara/chikuden"
+  spec.description   = "Riffle caches paginated record IDs using Redis Sorted Set to eliminate repeated LIMIT/OFFSET queries. Works with Kaminari and Pagy."
+  spec.homepage      = "https://github.com/yebihara/riffle"
   spec.license       = "MIT"
 
   spec.required_ruby_version = ">= 2.7.0"

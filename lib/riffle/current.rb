@@ -2,7 +2,7 @@
 
 require "active_support/current_attributes"
 
-module Chikuden
+module Riffle
   class Current < ActiveSupport::CurrentAttributes
     attribute :enabled
     attribute :cursor_id

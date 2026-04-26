@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Chikuden
+module Riffle
   module Store
     class Base
       # Store IDs with a cursor_id

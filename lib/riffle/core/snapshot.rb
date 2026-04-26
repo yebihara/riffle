@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-module Chikuden
+module Riffle
   module Core
     class Snapshot
       attr_reader :cursor
 
       def initialize(cursor, store: nil)
         @cursor = cursor
-        @store = store || Chikuden.store
+        @store = store || Riffle.store
       end
 
       # Get IDs for a specific page
