@@ -43,6 +43,29 @@ RSpec.describe Riffle::Adapters::Kaminari::RelationExtension do
     end
   end
 
+  context "when cursor_id is expired/unknown" do
+    before do
+      Riffle::Current.enabled = true
+      Riffle::Current.cursor_id = "never-existed"
+    end
+
+    it "creates a new cursor under :auto (default)" do
+      relation = User.order(:name).page(1).per(5)
+      relation.records
+      expect(relation.riffle_cursor_id).to be_a(String)
+      expect(relation.riffle_cursor_id).not_to eq("never-existed")
+    end
+
+    it "raises Riffle::CursorExpired under :strict" do
+      Riffle.config.on_cursor_expired = :strict
+      expect {
+        User.order(:name).page(1).per(5).records
+      }.to raise_error(Riffle::CursorExpired, /never-existed/)
+    ensure
+      Riffle.config.on_cursor_expired = :auto
+    end
+  end
+
   context "when reusing an existing cursor_id" do
     let(:initial_relation) do
       Riffle::Current.enabled = true

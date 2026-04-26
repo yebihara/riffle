@@ -22,6 +22,11 @@ module Riffle
 
           if cursor
             result = fetch_from_cursor(cursor, base_scope, page, items, store)
+          elsif cursor_id.present? && Riffle.config.on_cursor_expired == :strict
+            # The caller passed a cursor_id but it no longer exists.
+            # Strict mode surfaces this so the app can redirect to a fresh
+            # search instead of silently creating a different snapshot.
+            raise Riffle::CursorExpired, "Cursor '#{cursor_id}' has expired"
           else
             result = fetch_with_new_cursor(base_scope, page, items, store)
           end

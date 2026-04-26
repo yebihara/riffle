@@ -59,6 +59,14 @@ Riffle.configure do |config|
   #                           検索条件の絞り込みを促す
   config.on_max_ids_exceeded = :truncate
 
+  # cursor_id が指定されたが期限切れ／存在しない場合の挙動:
+  #   :auto   (デフォルト) — 新しい cursor を発行し、その時点の検索結果から
+  #                          ページを返す
+  #   :strict             — Riffle::CursorExpired を投げる。呼び出し側で
+  #                          再検索を促せる。SoR系でスナップショットの連続性を
+  #                          重視する場合はこちらを推奨
+  config.on_cursor_expired = :auto
+
   # カーソルパラメータ名（デフォルト: :cursor_id）
   config.cursor_param = :cursor_id
 

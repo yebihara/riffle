@@ -12,8 +12,20 @@ module Riffle
     #                         can prompt the user to narrow their search
     VALID_ON_MAX_IDS_EXCEEDED = %i[truncate raise].freeze
 
+    # Behavior when a request arrives with a cursor_id that no longer exists
+    # (TTL expiry, manual deletion, Redis flush):
+    #   :auto (default) — silently create a new cursor and return the page
+    #                     from the fresh result set. Best for casual UIs
+    #                     where the user just wants something to come back.
+    #   :strict         — raise Riffle::CursorExpired so the caller can
+    #                     redirect the user to start a new search. Better
+    #                     fit for SoR systems where snapshot continuity
+    #                     matters more than convenience.
+    VALID_ON_CURSOR_EXPIRED = %i[auto strict].freeze
+
     attr_accessor :redis, :ttl, :max_ids, :cursor_param, :logger,
-                  :redis_key_prefix, :on_max_ids_exceeded
+                  :redis_key_prefix, :on_max_ids_exceeded,
+                  :on_cursor_expired
 
     def initialize
       @redis = nil
@@ -23,6 +35,7 @@ module Riffle
       @logger = nil
       @redis_key_prefix = DEFAULT_REDIS_KEY_PREFIX
       @on_max_ids_exceeded = :truncate
+      @on_cursor_expired = :auto
     end
 
     def on_max_ids_exceeded=(value)
@@ -31,6 +44,14 @@ module Riffle
               "on_max_ids_exceeded must be one of #{VALID_ON_MAX_IDS_EXCEEDED.inspect}, got #{value.inspect}"
       end
       @on_max_ids_exceeded = value
+    end
+
+    def on_cursor_expired=(value)
+      unless VALID_ON_CURSOR_EXPIRED.include?(value)
+        raise ConfigurationError,
+              "on_cursor_expired must be one of #{VALID_ON_CURSOR_EXPIRED.inspect}, got #{value.inspect}"
+      end
+      @on_cursor_expired = value
     end
 
     def redis!

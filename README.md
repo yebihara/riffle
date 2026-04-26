@@ -59,6 +59,15 @@ Riffle.configure do |config|
   #                         caller can prompt the user to narrow their search
   config.on_max_ids_exceeded = :truncate
 
+  # Behavior when a request arrives with a cursor_id that no longer
+  # exists (TTL expiry, manual deletion, Redis flush):
+  #   :auto (default) — silently create a new cursor and return the page
+  #                     from the fresh result set.
+  #   :strict         — raise Riffle::CursorExpired so the caller can
+  #                     redirect the user to start a new search; preferred
+  #                     for SoR systems where snapshot continuity matters.
+  config.on_cursor_expired = :auto
+
   # Cursor parameter name (default: :cursor_id)
   config.cursor_param = :cursor_id
 

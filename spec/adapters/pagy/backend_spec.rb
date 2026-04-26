@@ -49,6 +49,35 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
     end
   end
 
+  describe "#pagy_riffle when cursor_id is expired/unknown" do
+    let(:controller) { controller_class.new(page: 1, items: 5, cursor_id: "never-existed") }
+
+    it "creates a new cursor under :auto (default)" do
+      pagy, _ = controller.pagy_riffle(User.order(:name))
+      expect(pagy.riffle_cursor_id).to be_a(String)
+      expect(pagy.riffle_cursor_id).not_to eq("never-existed")
+    end
+
+    it "raises Riffle::CursorExpired under :strict" do
+      Riffle.config.on_cursor_expired = :strict
+      expect {
+        controller.pagy_riffle(User.order(:name))
+      }.to raise_error(Riffle::CursorExpired, /never-existed/)
+    ensure
+      Riffle.config.on_cursor_expired = :auto
+    end
+
+    it "still creates a fresh cursor under :strict when no cursor_id is given" do
+      Riffle.config.on_cursor_expired = :strict
+      ctrl = controller_class.new(page: 1, items: 5)  # no cursor_id at all
+      expect {
+        ctrl.pagy_riffle(User.order(:name))
+      }.not_to raise_error
+    ensure
+      Riffle.config.on_cursor_expired = :auto
+    end
+  end
+
   describe "#pagy_riffle (with existing cursor_id)" do
     let(:initial_controller) { controller_class.new(page: 1, items: 5) }
 
