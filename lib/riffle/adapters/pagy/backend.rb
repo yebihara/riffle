@@ -59,7 +59,7 @@ module Riffle
 
         def fetch_with_new_cursor(collection, page, items, store)
           base_scope = collection.except(:limit, :offset)
-          all_ids = base_scope.pluck(:id)
+          all_ids = base_scope.pluck(base_scope.klass.primary_key)
           total = all_ids.size
 
           cursor = Riffle::Core::Cursor.create(all_ids, total_count: total, store: store)

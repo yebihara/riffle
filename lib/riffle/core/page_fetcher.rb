@@ -99,9 +99,13 @@ module Riffle
       def fetch_records_by_ids(ids)
         return [] if ids.empty?
 
-        records = @model_class.where(id: ids).to_a
-        id_order = ids.each_with_index.to_h
-        records.sort_by { |r| id_order[r.id] || Float::INFINITY }
+        pk = @model_class.primary_key
+        records = @model_class.where(pk => ids).to_a
+        # Stringify on both sides: Redis store returns string IDs, Memory store
+        # preserves whatever was stored. Normalizing to strings keeps the order
+        # lookup correct across PK types (integer / UUID / etc).
+        id_order = ids.each_with_index.to_h { |id, i| [id.to_s, i] }
+        records.sort_by { |r| id_order[r.public_send(pk).to_s] || Float::INFINITY }
       end
     end
   end

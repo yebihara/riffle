@@ -17,8 +17,13 @@ RSpec.describe Riffle::Core::PageFetcher do
         @id = id
       end
 
+      def self.primary_key
+        "id"
+      end
+
       def self.where(conditions)
-        MockRelation.new(conditions[:id])
+        ids = conditions[primary_key] || conditions[primary_key.to_sym]
+        MockRelation.new(ids)
       end
     end
   end
@@ -107,8 +112,13 @@ RSpec.describe Riffle::Core::PageFetcher do
           attr_accessor :deleted_ids
         end
 
+        def self.primary_key
+          "id"
+        end
+
         def self.where(conditions)
-          MockRelationWithDeleted.new(conditions[:id], @deleted_ids)
+          ids = conditions[primary_key] || conditions[primary_key.to_sym]
+          MockRelationWithDeleted.new(ids, @deleted_ids)
         end
       end
     end
@@ -149,6 +159,93 @@ RSpec.describe Riffle::Core::PageFetcher do
       expect(remaining_ids).not_to include(1)
       expect(remaining_ids).not_to include(4)
     end
+  end
+
+  describe "with custom primary key (e.g. UUID)" do
+    let(:uuid_ids) { %w[abc-123 def-456 ghi-789] }
+    let(:uuid_cursor) { Riffle::Core::Cursor.create(uuid_ids, total_count: 3, store: store) }
+    let(:uuid_snapshot) { Riffle::Core::Snapshot.new(uuid_cursor, store: store) }
+
+    let(:uuid_model_class) do
+      Class.new do
+        attr_accessor :uuid
+
+        def initialize(uuid)
+          @uuid = uuid
+        end
+
+        def self.primary_key
+          "uuid"
+        end
+
+        def self.where(conditions)
+          ids = conditions[primary_key] || conditions[primary_key.to_sym]
+          MockUuidRelation.new(ids)
+        end
+      end
+    end
+
+    let(:uuid_fetcher) do
+      described_class.new(snapshot: uuid_snapshot, model_class: uuid_model_class, store: store)
+    end
+
+    it "uses primary_key to query records (not hardcoded :id)" do
+      result = uuid_fetcher.fetch(page: 1, per_page: 3)
+      expect(result.records.map(&:uuid)).to eq(%w[abc-123 def-456 ghi-789])
+    end
+
+    it "preserves order using primary_key value" do
+      # MockUuidRelation reverses order to simulate DB returning rows out of order
+      result = uuid_fetcher.fetch(page: 1, per_page: 3)
+      expect(result.records.map(&:uuid)).to eq(uuid_ids) # original cache order preserved
+    end
+  end
+
+  describe "with stringified IDs from store" do
+    # Simulates Redis store returning string IDs (which is the actual Redis behavior)
+    let(:string_ids) { %w[1 2 3] }
+    let(:string_cursor) { Riffle::Core::Cursor.create(string_ids, total_count: 3, store: store) }
+    let(:string_snapshot) { Riffle::Core::Snapshot.new(string_cursor, store: store) }
+    let(:int_model_class) do
+      Class.new do
+        attr_accessor :id
+
+        def initialize(id)
+          @id = id
+        end
+
+        def self.primary_key
+          "id"
+        end
+
+        def self.where(conditions)
+          ids = conditions[primary_key] || conditions[primary_key.to_sym]
+          # Simulate ActiveRecord casting strings to integers for integer PK
+          MockRelation.new(ids.map(&:to_i))
+        end
+      end
+    end
+
+    let(:string_fetcher) do
+      described_class.new(snapshot: string_snapshot, model_class: int_model_class, store: store)
+    end
+
+    it "matches order even when store returns strings and records have integer IDs" do
+      result = string_fetcher.fetch(page: 1, per_page: 3)
+      expect(result.records.map(&:id)).to eq([1, 2, 3])
+    end
+  end
+end
+
+# Mock relation for UUID-keyed records
+class MockUuidRelation
+  def initialize(ids)
+    @ids = ids
+  end
+
+  def to_a
+    # Simulate DB returning rows in arbitrary order
+    @ids.uniq.sort.reverse.map { |id| OpenStruct.new(uuid: id) }
   end
 end
 

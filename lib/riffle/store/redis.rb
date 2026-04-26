@@ -70,7 +70,10 @@ module Riffle
           "[Riffle] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{result.size}"
         end
 
-        result.map(&:to_i)
+        # Return raw strings; ActiveRecord casts to the model's primary key type
+        # at WHERE-clause time. Coercing to Integer here would corrupt UUIDs and
+        # other string-typed primary keys.
+        result
       end
 
       def total_count(cursor_id)

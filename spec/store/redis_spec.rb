@@ -214,6 +214,25 @@ RSpec.describe Riffle::Store::Redis do
     end
   end
 
+  describe "with UUID-style string IDs" do
+    let(:uuid_ids) { %w[abc-123 def-456 ghi-789] }
+
+    before { store.store(cursor_id, uuid_ids, total_count: 3) }
+
+    it "preserves string IDs without coercing to integer" do
+      result = store.fetch_page(cursor_id, offset: 0, limit: 3)
+      expect(result).to eq(uuid_ids)
+    end
+
+    it "removes string IDs intact" do
+      removed = store.remove_ids(cursor_id, ["def-456"])
+      expect(removed).to eq(1)
+
+      remaining = store.fetch_page(cursor_id, offset: 0, limit: 3)
+      expect(remaining).to eq(%w[abc-123 ghi-789])
+    end
+  end
+
   describe "key prefix configuration" do
     it "uses Configuration.redis_key_prefix by default" do
       Riffle.config.redis_key_prefix = "custom_prefix"
