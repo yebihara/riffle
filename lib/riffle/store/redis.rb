@@ -164,12 +164,16 @@ module Riffle
         @key_prefix || Riffle.config.redis_key_prefix
       end
 
+      # Wrap the cursor_id in {} so that the ids and meta keys for the same
+      # cursor land in the same Redis Cluster slot (Cluster routes by the
+      # substring inside the first {...} when present). Without this, MULTI
+      # blocks that touch both keys fail with CROSSSLOT on Cluster.
       def ids_key(cursor_id)
-        "#{effective_key_prefix}:#{cursor_id}:#{IDS_SUFFIX}"
+        "#{effective_key_prefix}:{#{cursor_id}}:#{IDS_SUFFIX}"
       end
 
       def meta_key(cursor_id)
-        "#{effective_key_prefix}:#{cursor_id}:#{META_SUFFIX}"
+        "#{effective_key_prefix}:{#{cursor_id}}:#{META_SUFFIX}"
       end
 
       def log(level, &block)

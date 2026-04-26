@@ -210,6 +210,13 @@ The frontend sends `?cursor_id=xxx&page=2` for subsequent requests.
 | Total count | ZCARD | O(1) |
 | Set TTL | EXPIRE | O(1) |
 
+### Redis Cluster
+
+Riffle uses two Redis keys per cursor (`riffle:{CURSOR_ID}:ids` and
+`riffle:{CURSOR_ID}:meta`) and updates them inside `MULTI` blocks. The
+`{CURSOR_ID}` hash tag ensures both keys hash to the same Cluster slot,
+so MULTI does not raise CROSSSLOT.
+
 ### Core API
 
 You can use the Core API directly:

@@ -210,6 +210,13 @@ end
 | 総件数 | ZCARD | O(1) |
 | TTL設定 | EXPIRE | O(1) |
 
+### Redis Cluster
+
+Riffleは1カーソルあたり2つのキー（`riffle:{CURSOR_ID}:ids` と
+`riffle:{CURSOR_ID}:meta`）を `MULTI` ブロックで更新します。
+`{CURSOR_ID}` ハッシュタグにより両キーが必ず同一スロットに配置されるため、
+Cluster構成でもCROSSSLOTエラーになりません。
+
 ### コアAPI
 
 直接コアAPIを使用することも可能:

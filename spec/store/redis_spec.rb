@@ -16,28 +16,28 @@ RSpec.describe Riffle::Store::Redis do
     it "creates ids and meta keys with the configured prefix" do
       store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.exists?("riffle:#{cursor_id}:ids")).to be true
-      expect(redis.exists?("riffle:#{cursor_id}:meta")).to be true
+      expect(redis.exists?("riffle:{#{cursor_id}}:ids")).to be true
+      expect(redis.exists?("riffle:{#{cursor_id}}:meta")).to be true
     end
 
     it "stores IDs in a sorted set with index as score" do
       store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.zrange("riffle:#{cursor_id}:ids", 0, -1)).to eq(ids.map(&:to_s))
+      expect(redis.zrange("riffle:{#{cursor_id}}:ids", 0, -1)).to eq(ids.map(&:to_s))
     end
 
     it "stores metadata" do
       store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.hget("riffle:#{cursor_id}:meta", "total_count")).to eq("100")
-      expect(redis.hget("riffle:#{cursor_id}:meta", "stored_count")).to eq("10")
+      expect(redis.hget("riffle:{#{cursor_id}}:meta", "total_count")).to eq("100")
+      expect(redis.hget("riffle:{#{cursor_id}}:meta", "stored_count")).to eq("10")
     end
 
     it "sets TTL on both keys" do
       store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.ttl("riffle:#{cursor_id}:ids")).to be_between(1, 300).inclusive
-      expect(redis.ttl("riffle:#{cursor_id}:meta")).to be_between(1, 300).inclusive
+      expect(redis.ttl("riffle:{#{cursor_id}}:ids")).to be_between(1, 300).inclusive
+      expect(redis.ttl("riffle:{#{cursor_id}}:meta")).to be_between(1, 300).inclusive
     end
 
     it "truncates IDs if exceeding max_ids" do
@@ -58,7 +58,7 @@ RSpec.describe Riffle::Store::Redis do
       store.store(cursor_id, ids, total_count: 100)
       store.store(cursor_id, [99, 98], total_count: 2)
 
-      expect(redis.zrange("riffle:#{cursor_id}:ids", 0, -1)).to eq(%w[99 98])
+      expect(redis.zrange("riffle:{#{cursor_id}}:ids", 0, -1)).to eq(%w[99 98])
       expect(store.total_count(cursor_id)).to eq(2)
     end
 
@@ -144,8 +144,8 @@ RSpec.describe Riffle::Store::Redis do
     it "removes both ids and meta keys" do
       store.delete(cursor_id)
 
-      expect(redis.exists?("riffle:#{cursor_id}:ids")).to be false
-      expect(redis.exists?("riffle:#{cursor_id}:meta")).to be false
+      expect(redis.exists?("riffle:{#{cursor_id}}:ids")).to be false
+      expect(redis.exists?("riffle:{#{cursor_id}}:meta")).to be false
     end
 
     it "returns false for non-existent cursor" do
@@ -167,8 +167,8 @@ RSpec.describe Riffle::Store::Redis do
       long_store = described_class.new(redis: redis, ttl: 600, max_ids: 1000)
       long_store.touch("short_cursor")
 
-      expect(redis.ttl("riffle:short_cursor:ids")).to be > 60
-      expect(redis.ttl("riffle:short_cursor:meta")).to be > 60
+      expect(redis.ttl("riffle:{short_cursor}:ids")).to be > 60
+      expect(redis.ttl("riffle:{short_cursor}:meta")).to be > 60
     end
 
     it "returns false for non-existent cursor" do
@@ -183,7 +183,7 @@ RSpec.describe Riffle::Store::Redis do
       removed = store.remove_ids(cursor_id, [3, 5])
 
       expect(removed).to eq(2)
-      remaining = redis.zrange("riffle:#{cursor_id}:ids", 0, -1)
+      remaining = redis.zrange("riffle:{#{cursor_id}}:ids", 0, -1)
       expect(remaining.map(&:to_i)).not_to include(3)
       expect(remaining.map(&:to_i)).not_to include(5)
     end
@@ -233,14 +233,25 @@ RSpec.describe Riffle::Store::Redis do
     end
   end
 
+  describe "Redis Cluster compatibility (hash-tagged keys)" do
+    it "wraps cursor_id in {} so ids/meta land in the same Cluster slot" do
+      store.store(cursor_id, ids, total_count: 100)
+
+      expect(redis.exists?("riffle:{#{cursor_id}}:ids")).to be true
+      expect(redis.exists?("riffle:{#{cursor_id}}:meta")).to be true
+      # Without hashtag the keys would not be guaranteed co-located on Cluster
+      expect(redis.exists?("riffle:#{cursor_id}:ids")).to be false
+    end
+  end
+
   describe "key prefix configuration" do
     it "uses Configuration.redis_key_prefix by default" do
       Riffle.config.redis_key_prefix = "custom_prefix"
       default_store = described_class.new(redis: redis, ttl: 300, max_ids: 1000)
       default_store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.exists?("custom_prefix:#{cursor_id}:ids")).to be true
-      expect(redis.exists?("custom_prefix:#{cursor_id}:meta")).to be true
+      expect(redis.exists?("custom_prefix:{#{cursor_id}}:ids")).to be true
+      expect(redis.exists?("custom_prefix:{#{cursor_id}}:meta")).to be true
     ensure
       Riffle.config.redis_key_prefix = Riffle::Configuration::DEFAULT_REDIS_KEY_PREFIX
     end
@@ -254,8 +265,8 @@ RSpec.describe Riffle::Store::Redis do
       )
       override_store.store(cursor_id, ids, total_count: 100)
 
-      expect(redis.exists?("other:#{cursor_id}:ids")).to be true
-      expect(redis.exists?("other:#{cursor_id}:meta")).to be true
+      expect(redis.exists?("other:{#{cursor_id}}:ids")).to be true
+      expect(redis.exists?("other:{#{cursor_id}}:meta")).to be true
     end
   end
 end
