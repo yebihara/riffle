@@ -27,10 +27,15 @@ module Riffle
       end
 
       # Calculate total pages
-      # @param per_page [Integer] items per page
+      # @param per_page [Integer] items per page (must be positive)
       # @return [Integer]
+      # @raise [ArgumentError] if per_page is not a positive integer
       def total_pages(per_page:)
-        (total_count.to_f / per_page).ceil
+        if per_page.to_i <= 0
+          raise ArgumentError,
+                "per_page must be a positive integer (got #{per_page.inspect})"
+        end
+        (total_count.to_f / per_page.to_i).ceil
       end
 
       # Check if there's a next page

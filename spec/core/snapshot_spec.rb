@@ -40,6 +40,18 @@ RSpec.describe Riffle::Core::Snapshot do
       expect(snapshot.total_pages(per_page: 25)).to eq(4)
       expect(snapshot.total_pages(per_page: 30)).to eq(4)
     end
+
+    it "raises ArgumentError when per_page is zero (no Float::INFINITY blow-up)" do
+      expect { snapshot.total_pages(per_page: 0) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    it "raises ArgumentError when per_page is negative" do
+      expect { snapshot.total_pages(per_page: -5) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    it "raises ArgumentError when per_page is nil" do
+      expect { snapshot.total_pages(per_page: nil) }.to raise_error(ArgumentError, /positive integer/)
+    end
   end
 
   describe "#next_page?" do

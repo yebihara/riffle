@@ -69,6 +69,22 @@ RSpec.describe Riffle::Core::PageFetcher do
       result = fetcher.fetch(page: -1, per_page: 3)
       expect(result.page).to eq(1)
     end
+
+    it "raises ArgumentError when per_page is zero" do
+      expect { fetcher.fetch(page: 1, per_page: 0) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    it "raises ArgumentError when per_page is negative" do
+      expect { fetcher.fetch(page: 1, per_page: -5) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    it "raises ArgumentError when per_page is nil" do
+      expect { fetcher.fetch(page: 1, per_page: nil) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    it "raises ArgumentError when per_page is non-numeric string" do
+      expect { fetcher.fetch(page: 1, per_page: "abc") }.to raise_error(ArgumentError, /positive integer/)
+    end
   end
 
   describe "Result" do

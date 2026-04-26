@@ -65,6 +65,10 @@ module Riffle
       def fetch(page:, per_page:)
         page = [1, page.to_i].max
         per_page = per_page.to_i
+        if per_page <= 0
+          raise ArgumentError,
+                "per_page must be a positive integer (got #{per_page.inspect})"
+        end
         offset = (page - 1) * per_page
 
         records = fetch_with_backfill(offset: offset, limit: per_page)
