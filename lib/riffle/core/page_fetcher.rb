@@ -3,7 +3,7 @@
 module Riffle
   module Core
     class PageFetcher
-      Result = Struct.new(:records, :total_count, :cursor_id, :page, :per_page, keyword_init: true) do
+      Result = Struct.new(:records, :total_count, :cursor_id, :page, :per_page, :truncated, keyword_init: true) do
         def total_pages
           (total_count.to_f / per_page).ceil
         end
@@ -26,6 +26,13 @@ module Riffle
 
         def offset
           (page - 1) * per_page
+        end
+
+        # True when the cached snapshot was capped at max_ids and does not
+        # represent the full search result. Apps typically surface this as
+        # "showing first N of M+" or by hiding pages beyond the cached range.
+        def truncated?
+          !!truncated
         end
       end
 
@@ -67,7 +74,8 @@ module Riffle
           total_count: @store.total_count(@snapshot.cursor_id),
           cursor_id: @snapshot.cursor_id,
           page: page,
-          per_page: per_page
+          per_page: per_page,
+          truncated: @store.truncated?(@snapshot.cursor_id)
         )
       end
 

@@ -51,6 +51,14 @@ Riffle.configure do |config|
   # キャッシュする最大ID数（デフォルト: 100,000）
   config.max_ids = 100_000
 
+  # 検索結果が max_ids を超えた場合の挙動:
+  #   :truncate (デフォルト) — max_idsで打ち切り、WARNログを出力し、
+  #                           cursorに truncated フラグを立てる。アプリ側で
+  #                           result.truncated? を見て「先頭N件のみ」表示が可能
+  #   :raise                — Riffle::MaxIdsExceeded を発生させ、呼び出し側に
+  #                           検索条件の絞り込みを促す
+  config.on_max_ids_exceeded = :truncate
+
   # カーソルパラメータ名（デフォルト: :cursor_id）
   config.cursor_param = :cursor_id
 

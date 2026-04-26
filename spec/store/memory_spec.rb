@@ -16,6 +16,29 @@ RSpec.describe Riffle::Store::Memory do
 
       expect(small_store.stored_count(cursor_id)).to eq(5)
     end
+
+    it "marks the cursor as truncated when ids exceed max_ids" do
+      small_store = described_class.new(ttl: 300, max_ids: 5)
+      small_store.store(cursor_id, ids, total_count: 100)
+
+      expect(small_store.truncated?(cursor_id)).to be true
+    end
+
+    it "does not mark cursor as truncated when ids fit within max_ids" do
+      store.store(cursor_id, ids, total_count: 100)
+      expect(store.truncated?(cursor_id)).to be false
+    end
+
+    it "raises MaxIdsExceeded when on_max_ids_exceeded = :raise" do
+      Riffle.config.on_max_ids_exceeded = :raise
+      small_store = described_class.new(ttl: 300, max_ids: 5)
+
+      expect {
+        small_store.store(cursor_id, ids, total_count: 100)
+      }.to raise_error(Riffle::MaxIdsExceeded)
+    ensure
+      Riffle.config.on_max_ids_exceeded = :truncate
+    end
   end
 
   describe "#fetch_page" do

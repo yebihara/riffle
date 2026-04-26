@@ -18,12 +18,16 @@ module Riffle
         meta_key = meta_key(cursor_id)
         ttl = effective_ttl
         max_ids = effective_max_ids
+        truncated = ids.size > max_ids
 
-        # Truncate IDs if exceeding max
+        if truncated
+          handle_truncation!(cursor_id, ids.size, max_ids)
+        end
+
         stored_ids = ids.take(max_ids)
 
         log(:info) do
-          "[Riffle] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s"
+          "[Riffle] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s truncated=#{truncated}"
         end
 
         redis.multi do |multi|
@@ -39,6 +43,7 @@ module Riffle
           # Store metadata
           multi.hset(meta_key, "total_count", total_count)
           multi.hset(meta_key, "stored_count", stored_ids.size)
+          multi.hset(meta_key, "truncated", truncated ? 1 : 0)
 
           # Set TTL
           multi.expire(ids_key, ttl)
@@ -94,6 +99,11 @@ module Riffle
         raise CursorExpired, "Cursor '#{cursor_id}' has expired" if count.nil?
 
         count.to_i
+      end
+
+      def truncated?(cursor_id)
+        flag = redis.hget(meta_key(cursor_id), "truncated")
+        flag.to_i == 1
       end
 
       def exists?(cursor_id)
@@ -181,6 +191,19 @@ module Riffle
         return unless logger
 
         logger.public_send(level, &block)
+      end
+
+      def handle_truncation!(cursor_id, requested, kept)
+        case Riffle.config.on_max_ids_exceeded
+        when :raise
+          raise MaxIdsExceeded,
+                "Search produced #{requested} IDs, exceeding max_ids=#{kept}. " \
+                "Narrow your search or increase Riffle.config.max_ids."
+        when :truncate
+          log(:warn) do
+            "[Riffle] IDs truncated cursor_id=#{cursor_id} requested=#{requested} kept=#{kept}"
+          end
+        end
       end
     end
   end

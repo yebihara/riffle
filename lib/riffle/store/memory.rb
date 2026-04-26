@@ -13,17 +13,24 @@ module Riffle
 
       def store(cursor_id, ids, total_count:)
         max_ids = effective_max_ids
+        truncated = ids.size > max_ids
+
+        if truncated
+          handle_truncation!(cursor_id, ids.size, max_ids)
+        end
+
         stored_ids = ids.take(max_ids)
         ttl = effective_ttl
 
         log(:info) do
-          "[Riffle::Memory] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s"
+          "[Riffle::Memory] STORE cursor_id=#{cursor_id} ids_count=#{stored_ids.size} total_count=#{total_count} ttl=#{ttl}s truncated=#{truncated}"
         end
 
         @data[cursor_id] = {
           ids: stored_ids,
           total_count: total_count,
           stored_count: stored_ids.size,
+          truncated: truncated,
           expires_at: Time.now + ttl
         }
 
@@ -63,6 +70,15 @@ module Riffle
         raise CursorExpired, "Cursor '#{cursor_id}' has expired" if data.nil?
 
         data[:stored_count]
+      end
+
+      def truncated?(cursor_id)
+        cleanup_expired
+
+        data = @data[cursor_id]
+        return false if data.nil?
+
+        !!data[:truncated]
       end
 
       def exists?(cursor_id)
@@ -144,6 +160,19 @@ module Riffle
         return unless logger
 
         logger.public_send(level, &block)
+      end
+
+      def handle_truncation!(cursor_id, requested, kept)
+        case Riffle.config.on_max_ids_exceeded
+        when :raise
+          raise MaxIdsExceeded,
+                "Search produced #{requested} IDs, exceeding max_ids=#{kept}. " \
+                "Narrow your search or increase Riffle.config.max_ids."
+        when :truncate
+          log(:warn) do
+            "[Riffle::Memory] IDs truncated cursor_id=#{cursor_id} requested=#{requested} kept=#{kept}"
+          end
+        end
       end
     end
   end

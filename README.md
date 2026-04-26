@@ -51,6 +51,14 @@ Riffle.configure do |config|
   # Maximum IDs to cache (default: 100,000)
   config.max_ids = 100_000
 
+  # Behavior when a search produces more IDs than max_ids:
+  #   :truncate (default) — cap at max_ids, log a warning, and mark the
+  #                         cursor as truncated so the app can show
+  #                         "showing first N of M+" via result.truncated?
+  #   :raise              — abort with Riffle::MaxIdsExceeded so the
+  #                         caller can prompt the user to narrow their search
+  config.on_max_ids_exceeded = :truncate
+
   # Cursor parameter name (default: :cursor_id)
   config.cursor_param = :cursor_id
 

@@ -64,6 +64,15 @@ module Riffle
       def decrement_total_count(cursor_id, count)
         raise NotImplementedError
       end
+
+      # Whether the stored ID list was capped at max_ids at create time.
+      # When true, the cached snapshot represents only the first max_ids
+      # records of the search result; pages beyond that will be empty.
+      # @param cursor_id [String]
+      # @return [Boolean]
+      def truncated?(cursor_id)
+        raise NotImplementedError
+      end
     end
   end
 end

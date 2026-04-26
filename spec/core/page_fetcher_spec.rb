@@ -99,6 +99,25 @@ RSpec.describe Riffle::Core::PageFetcher do
     it "#offset calculates correctly" do
       expect(result.offset).to eq(3) # (2-1) * 3
     end
+
+    it "#truncated? is false when the snapshot was not capped" do
+      expect(result.truncated?).to be false
+    end
+  end
+
+  describe "Result#truncated? when max_ids was hit" do
+    let(:tiny_store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 3) }
+    let(:big_ids) { (1..10).to_a }
+    let(:tiny_cursor) { Riffle::Core::Cursor.create(big_ids, total_count: 10, store: tiny_store) }
+    let(:tiny_snapshot) { Riffle::Core::Snapshot.new(tiny_cursor, store: tiny_store) }
+    let(:tiny_fetcher) do
+      described_class.new(snapshot: tiny_snapshot, model_class: model_class, store: tiny_store)
+    end
+
+    it "is true so the application can surface the cap to the user" do
+      result = tiny_fetcher.fetch(page: 1, per_page: 3)
+      expect(result.truncated?).to be true
+    end
   end
 
   describe "deleted record backfill" do
