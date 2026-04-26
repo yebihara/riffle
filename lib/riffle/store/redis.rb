@@ -56,29 +56,41 @@ module Riffle
       end
 
       def fetch_page(cursor_id, offset:, limit:)
+        # Single-call form, kept for direct callers and the public Store API.
+        # PageFetcher uses fetch_page_and_meta to avoid the extra RTT.
+        fetch_page_and_meta(cursor_id, offset: offset, limit: limit)[:ids]
+      end
+
+      def fetch_page_and_meta(cursor_id, offset:, limit:)
         ids_key = ids_key(cursor_id)
-
-        raise CursorExpired, "Cursor '#{cursor_id}' has expired" unless exists?(cursor_id)
-
-        # ZRANGE with BYSCORE to get IDs by index range
-        # Score is the index, so we use ZRANGE start end
+        meta_key = meta_key(cursor_id)
         start_index = offset
         end_index = offset + limit - 1
 
         log(:info) do
-          "[Riffle] ZRANGE #{ids_key} #{start_index} #{end_index}"
+          "[Riffle] PIPELINE ZRANGE #{ids_key} #{start_index} #{end_index} + HGET #{meta_key} (total_count, truncated)"
         end
 
-        result = redis.zrange(ids_key, start_index, end_index)
+        ids, total_count_str, truncated_str = redis.pipelined do |p|
+          p.zrange(ids_key, start_index, end_index)
+          p.hget(meta_key, "total_count")
+          p.hget(meta_key, "truncated")
+        end
+
+        raise CursorExpired, "Cursor '#{cursor_id}' has expired" if total_count_str.nil?
 
         log(:info) do
-          "[Riffle] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{result.size}"
+          "[Riffle] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{ids.size}"
         end
 
-        # Return raw strings; ActiveRecord casts to the model's primary key type
-        # at WHERE-clause time. Coercing to Integer here would corrupt UUIDs and
-        # other string-typed primary keys.
-        result
+        # Return ids as raw strings; ActiveRecord casts to the model's primary
+        # key type at WHERE-clause time. Coercing to Integer would corrupt
+        # UUIDs and other string-typed primary keys.
+        {
+          ids: ids,
+          total_count: total_count_str.to_i,
+          truncated: truncated_str.to_i == 1
+        }
       end
 
       def total_count(cursor_id)

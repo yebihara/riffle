@@ -71,15 +71,19 @@ module Riffle
         end
         offset = (page - 1) * per_page
 
-        records = fetch_with_backfill(offset: offset, limit: per_page)
+        # fetch_with_backfill returns the records plus the latest meta reading
+        # that came back with the page IDs (single round trip on Redis), so we
+        # don't need to issue a separate total_count / truncated? round trip
+        # for the Result construction.
+        backfill = fetch_with_backfill(offset: offset, limit: per_page)
 
         Result.new(
-          records: records,
-          total_count: @store.total_count(@snapshot.cursor_id),
+          records: backfill[:records],
+          total_count: backfill[:total_count],
           cursor_id: @snapshot.cursor_id,
           page: page,
           per_page: per_page,
-          truncated: @store.truncated?(@snapshot.cursor_id)
+          truncated: backfill[:truncated]
         )
       end
 
@@ -92,11 +96,19 @@ module Riffle
         fetch_size = limit
         max_attempts = 20 # 無限ループ防止（倍々で増やすので多めに）
         pk = @model_class.primary_key
+        total_count = nil
+        truncated = false
 
         max_attempts.times do
           break if remaining <= 0
 
-          ids = @snapshot.page_ids(page: 1, per_page: fetch_size, offset: current_offset)
+          page_meta = @store.fetch_page_and_meta(
+            @snapshot.cursor_id, offset: current_offset, limit: fetch_size
+          )
+          ids = page_meta[:ids]
+          total_count = page_meta[:total_count]
+          truncated = page_meta[:truncated]
+
           break if ids.empty?
 
           fetched = fetch_records_by_ids(ids)
@@ -111,7 +123,8 @@ module Riffle
             # キャッシュから削除されたIDを除去 + total_count/stored_count を
             # 「実際に削除された数」だけデクリメント。並行リクエスト下での
             # 二重デクリメントを避け、HINCRBY ペアもアトミックに揃える。
-            @store.remove_ids_and_decrement(@snapshot.cursor_id, deleted_ids)
+            removed = @store.remove_ids_and_decrement(@snapshot.cursor_id, deleted_ids)
+            total_count -= removed if total_count && removed > 0
 
             # 次回は倍の件数を取得（連続削除に対応）
             fetch_size = [fetch_size * 2, 1000].min
@@ -124,7 +137,16 @@ module Riffle
           current_offset += ids.size
         end
 
-        records.take(limit)
+        # If the loop never executed (limit <= 0 path is guarded above, but
+        # belt-and-suspenders), pull the meta lazily so total_count is still
+        # populated for the Result.
+        if total_count.nil?
+          meta = @store.fetch_page_and_meta(@snapshot.cursor_id, offset: 0, limit: 0)
+          total_count = meta[:total_count]
+          truncated = meta[:truncated]
+        end
+
+        { records: records.take(limit), total_count: total_count, truncated: truncated }
       end
 
       def fetch_records_by_ids(ids)

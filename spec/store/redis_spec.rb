@@ -237,6 +237,37 @@ RSpec.describe Riffle::Store::Redis do
     end
   end
 
+  describe "#fetch_page_and_meta" do
+    before { store.store(cursor_id, ids, total_count: 42) }
+
+    it "returns ids and meta in a single call" do
+      result = store.fetch_page_and_meta(cursor_id, offset: 0, limit: 3)
+      expect(result[:ids].map(&:to_i)).to eq([1, 2, 3])
+      expect(result[:total_count]).to eq(42)
+      expect(result[:truncated]).to be false
+    end
+
+    it "marks truncated correctly when the cursor was capped" do
+      small_store = described_class.new(redis: redis, ttl: 300, max_ids: 3)
+      small_store.store("capped", ids, total_count: 100)
+
+      result = small_store.fetch_page_and_meta("capped", offset: 0, limit: 3)
+      expect(result[:truncated]).to be true
+    end
+
+    it "raises CursorExpired when the cursor does not exist" do
+      expect {
+        store.fetch_page_and_meta("nonexistent", offset: 0, limit: 3)
+      }.to raise_error(Riffle::CursorExpired)
+    end
+
+    it "is the building block for fetch_page" do
+      via_combined = store.fetch_page_and_meta(cursor_id, offset: 0, limit: 3)[:ids]
+      via_legacy = store.fetch_page(cursor_id, offset: 0, limit: 3)
+      expect(via_legacy).to eq(via_combined)
+    end
+  end
+
   describe "with UUID-style string IDs" do
     let(:uuid_ids) { %w[abc-123 def-456 ghi-789] }
 

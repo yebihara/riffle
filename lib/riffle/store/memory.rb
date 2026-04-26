@@ -42,18 +42,26 @@ module Riffle
       end
 
       def fetch_page(cursor_id, offset:, limit:)
+        fetch_page_and_meta(cursor_id, offset: offset, limit: limit)[:ids]
+      end
+
+      def fetch_page_and_meta(cursor_id, offset:, limit:)
         cleanup_expired
 
         data = @data[cursor_id]
         raise CursorExpired, "Cursor '#{cursor_id}' has expired" if data.nil?
 
-        result = data[:ids][offset, limit] || []
+        ids = data[:ids][offset, limit] || []
 
         log(:info) do
-          "[Riffle::Memory] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{result.size}"
+          "[Riffle::Memory] FETCH cursor_id=#{cursor_id} offset=#{offset} limit=#{limit} fetched=#{ids.size}"
         end
 
-        result
+        {
+          ids: ids,
+          total_count: data[:total_count],
+          truncated: !!data[:truncated]
+        }
       end
 
       def total_count(cursor_id)

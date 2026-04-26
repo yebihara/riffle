@@ -21,6 +21,20 @@ module Riffle
         raise NotImplementedError
       end
 
+      # Fetch a page of IDs together with the cursor's metadata in a single
+      # round trip (pipelined on Redis). Used by PageFetcher so that one
+      # page-of-records lookup costs one Redis RTT instead of three.
+      #
+      # @param cursor_id [String]
+      # @param offset [Integer]
+      # @param limit [Integer]
+      # @return [Hash] with keys :ids (Array), :total_count (Integer),
+      #                :truncated (Boolean)
+      # @raise [CursorExpired] if the cursor is missing/expired
+      def fetch_page_and_meta(cursor_id, offset:, limit:)
+        raise NotImplementedError
+      end
+
       # Get total count for a cursor
       # @param cursor_id [String] unique cursor identifier
       # @return [Integer] total count
