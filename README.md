@@ -1,10 +1,78 @@
 # Riffle
 
-Riffle is a cursor-based caching gem for pagination. It is designed for use with Redis and optimized for Redis Sorted Set operations, eliminating repetitive `COUNT(*)` and `LIMIT/OFFSET` queries. An in-memory store is also available for testing without Redis.
+**Application-level Repeatable Read for paginated queries.**
 
-Supports both Kaminari and Pagy.
+Riffle brings database-style snapshot isolation to your Rails pagination.
+By caching the result-set ID list in Redis on the first request, it
+eliminates phantom reads across page navigation — users see a
+consistent, frozen view of their search results no matter how many
+times they navigate between pages, even if records are inserted,
+deleted, or reordered in the meantime.
+
+As a side effect, it also solves the classic OFFSET deep-pagination
+performance problem: page navigation is `O(log N + page_size)`
+regardless of page number, since the database is never asked to skip
+rows.
+
+Works with Kaminari and Pagy. An in-memory store is bundled for
+testing without Redis.
 
 [日本語ドキュメント](README_ja.md)
+
+## Why Riffle?
+
+In typical Rails pagination, each page navigation issues an independent
+SQL query. Two well-known problems follow:
+
+### 1. Phantom reads across pages (correctness)
+
+If records are inserted, deleted, or reordered between page 1 and
+page 2:
+
+- **Skip**: a record that *should* appear on page 2 is bumped to page 1
+  by a deletion above it; the user never sees it.
+- **Duplicate**: a record visible on page 1 is bumped down to page 2 by
+  an insertion above it; the user sees it twice.
+- **Inconsistent counts**: total page count shifts mid-navigation.
+
+This is the *phantom read anomaly* — the same problem that DB
+isolation levels (Repeatable Read, Snapshot Isolation) exist to solve.
+But HTTP pagination spans multiple stateless requests, so a single DB
+transaction cannot bridge them.
+
+### 2. Deep pagination performance (latency)
+
+`OFFSET 100000 LIMIT 20` forces the DB to scan and discard 100,000 rows.
+Latency grows linearly with page number.
+
+### How Riffle solves both
+
+On the first request, Riffle materializes the full result-set ID list
+into a Redis Sorted Set, generating an unguessable `cursor_id` to
+identify that snapshot. Subsequent page navigation:
+
+1. Slices the cached ID array (one Redis pipelined RTT, independent of page number).
+2. Fetches the actual records by primary key (`WHERE id IN (...)`).
+3. Returns the same records the first request would have returned for
+   that page — even if the underlying data has changed.
+
+The cache TTL acts as the snapshot's lifetime. Within that window the
+user sees a frozen, repeatable view, exactly as if a long-lived DB
+transaction were holding the query's snapshot.
+
+## Pagination Strategies Compared
+
+| Strategy | Phantom-free across pages | Deep pagination perf | Page-number jump |
+|---|:---:|:---:|:---:|
+| Plain Kaminari / Pagy (OFFSET) | ❌ | ❌ | ✅ |
+| Pagy::Countless | ❌ | ⚠️ (no COUNT, OFFSET still) | ✅ |
+| Pagy::Keyset (cursor) | ❌ (no snapshot) | ✅ | ❌ (next/prev only) |
+| Deferred Join | ❌ | ✅ | ✅ |
+| Elasticsearch scroll / PIT | ✅ | ✅ | ⚠️ |
+| **Riffle** | **✅** | **✅** | **✅** |
+
+Riffle is the only Ruby/Rails-native option that delivers all three
+properties without requiring Elasticsearch or DB-specific tricks.
 
 ## How It Works
 
@@ -12,15 +80,19 @@ Supports both Kaminari and Pagy.
 ┌─────────────────────────────────────┐
 │  kaminari adapter / pagy adapter    │  ← Adapter layer
 ├─────────────────────────────────────┤
-│         riffle (core)             │  ← Core API layer
+│            riffle (core)            │  ← Core API layer
 ├─────────────────────────────────────┤
 │         Redis Sorted Set            │  ← Storage layer
 └─────────────────────────────────────┘
 ```
 
-1. On the first request, fetch all record IDs and cache them in Redis
-2. For subsequent pages, retrieve IDs from cache and fetch records by those IDs
-3. Include cursor ID in pagination links to maintain snapshot consistency
+1. On the first request, fetch all matching record IDs and cache them
+   in Redis under a randomly generated `cursor_id`.
+2. On subsequent pages, slice the cached ID list and fetch records by
+   those IDs. Records deleted in the meantime are detected and
+   backfilled from the next IDs in the snapshot.
+3. The `cursor_id` is propagated in pagination links so every page
+   navigation lands on the same snapshot until the TTL expires.
 
 ## Installation
 

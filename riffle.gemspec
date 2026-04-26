@@ -10,8 +10,8 @@ Gem::Specification.new do |spec|
   spec.authors       = ["EBIHARA, Yuichiro"]
   spec.email         = ["yuichiro.ebihara@gmail.com"]
 
-  spec.summary       = "Cursor-based pagination cache using Redis Sorted Set"
-  spec.description   = "Riffle caches paginated record IDs using Redis Sorted Set to eliminate repeated LIMIT/OFFSET queries. Works with Kaminari and Pagy."
+  spec.summary       = "Application-level Repeatable Read isolation for paginated queries"
+  spec.description   = "Riffle caches paginated record IDs in Redis to provide snapshot isolation across page navigation, preventing phantom reads. As a side effect, it also solves the deep OFFSET pagination performance problem. Works with Kaminari and Pagy."
   spec.homepage      = "https://github.com/yebihara/riffle"
   spec.license       = "MIT"
 
