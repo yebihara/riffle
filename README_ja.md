@@ -1,5 +1,7 @@
 # Riffle
 
+[![CI](https://github.com/yebihara/riffle/actions/workflows/ci.yml/badge.svg)](https://github.com/yebihara/riffle/actions/workflows/ci.yml)
+
 **ページネーションにアプリケーション層の Repeatable Read を提供します**
 （これはあくまで比喩です。DBのRepeatable Readとの違いは
 [Riffleが凍結しないもの](#riffleが凍結しないもの)を参照してください）。

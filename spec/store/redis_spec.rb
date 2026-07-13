@@ -1,9 +1,22 @@
 # frozen_string_literal: true
 
 require "mock_redis"
+require "redis"
 
+# Runs against mock_redis by default. Set REDIS_URL to run the same
+# examples against a real Redis server (CI does this via a service
+# container) — that path exercises real pipelining / MULTI / TTL
+# semantics that mock_redis only approximates.
 RSpec.describe Riffle::Store::Redis do
-  let(:redis) { MockRedis.new }
+  let(:redis) do
+    if (url = ENV["REDIS_URL"])
+      ::Redis.new(url: url)
+    else
+      MockRedis.new
+    end
+  end
+
+  before { redis.flushdb if ENV["REDIS_URL"] }
   let(:store) { described_class.new(redis: redis, ttl: 300, max_ids: 1000) }
   let(:cursor_id) { "test_cursor_123" }
   let(:ids) { [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }

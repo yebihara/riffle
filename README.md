@@ -1,5 +1,7 @@
 # Riffle
 
+[![CI](https://github.com/yebihara/riffle/actions/workflows/ci.yml/badge.svg)](https://github.com/yebihara/riffle/actions/workflows/ci.yml)
+
 **Application-level Repeatable Read for paginated queries** (an analogy — see
 [What Riffle Does NOT Freeze](#what-riffle-does-not-freeze) for how it differs).
 

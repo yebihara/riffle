@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        gemfile:
+          - Gemfile # pagy 9
+          - gemfiles/pagy_8.gemfile
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/${{ matrix.gemfile }}
+      # Points the Redis store spec at the service container so it runs
+      # against real Redis (pipelining / MULTI / TTL) instead of mock_redis.
+      REDIS_URL: redis://localhost:6379/15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true # reads the Ruby version from .tool-versions
+      - run: bundle exec rspec
