@@ -1,13 +1,14 @@
 # Riffle
 
-**Application-level Repeatable Read for paginated queries.**
+**Application-level Repeatable Read for paginated queries** (an analogy — see
+[What Riffle Does NOT Freeze](#what-riffle-does-not-freeze) for how it differs).
 
-Riffle brings database-style snapshot isolation to your Rails pagination.
-By caching the result-set ID list in Redis on the first request, it
-eliminates phantom reads across page navigation — users see a
-consistent, frozen view of their search results no matter how many
-times they navigate between pages, even if records are inserted,
-deleted, or reordered in the meantime.
+Riffle brings a database-Repeatable-Read-like guarantee to your Rails
+pagination. By caching the result-set ID list in Redis on the first
+request, it freezes the result set's **membership and order**, which
+eliminates the phantom and duplicate rows that inserts and reordering
+would otherwise cause across page navigation — no matter how many
+times a user navigates between pages.
 
 As a side effect, it also solves the classic OFFSET deep-pagination
 performance problem: page navigation is `O(log N + page_size)`
@@ -53,12 +54,16 @@ identify that snapshot. Subsequent page navigation:
 
 1. Slices the cached ID array (one Redis pipelined RTT, independent of page number).
 2. Fetches the actual records by primary key (`WHERE id IN (...)`).
-3. Returns the same records the first request would have returned for
-   that page — even if the underlying data has changed.
+3. Returns the records at those IDs, preserving the snapshot's
+   membership and order — even if rows have since been inserted or
+   reordered elsewhere in the table.
 
-The cache TTL acts as the snapshot's lifetime. Within that window the
-user sees a frozen, repeatable view, exactly as if a long-lived DB
-transaction were holding the query's snapshot.
+The cache TTL acts as the snapshot's lifetime. Within that window,
+membership and order stay frozen, similar to a long-lived DB
+transaction holding the query's snapshot — though not the same
+guarantee. Attribute changes, deletions, and rows falling out of the
+original query conditions still show through; see
+[What Riffle Does NOT Freeze](#what-riffle-does-not-freeze).
 
 ## Pagination Strategies Compared
 
@@ -93,6 +98,32 @@ properties without requiring Elasticsearch or DB-specific tricks.
    backfilled from the next IDs in the snapshot.
 3. The `cursor_id` is propagated in pagination links so every page
    navigation lands on the same snapshot until the TTL expires.
+
+## What Riffle Does NOT Freeze
+
+Riffle freezes the result set's **membership and order** at snapshot
+time — not the full row contents. This differs from DB Repeatable Read
+in three ways:
+
+1. **Attribute updates are visible.** Every page re-fetches records by
+   ID (`WHERE id IN (...)`), so column changes made after the snapshot
+   was taken show up immediately.
+2. **Deletions mutate the snapshot.** When a record is deleted, Riffle
+   removes its ID from the cached list and backfills the page from the
+   next available ID (see
+   [Handling Deleted Records](#handling-deleted-records)). This shifts
+   page composition and `total_count`.
+3. **Records that fall out of the original WHERE clause are treated
+   as deleted.** Page fetches re-apply the base relation's conditions,
+   so a row that no longer matches — e.g. updated to a different
+   status — disappears from the snapshot exactly as if it had been
+   deleted.
+
+In short, Riffle prevents the phantom and duplicate rows that inserts
+and reordering cause across page navigation. It does not provide the
+full isolation of a database transaction — treat the Repeatable Read
+comparison as an analogy for that specific fix, not a literal
+guarantee.
 
 ## Supported Versions
 
