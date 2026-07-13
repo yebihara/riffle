@@ -94,6 +94,26 @@ properties without requiring Elasticsearch or DB-specific tricks.
 3. The `cursor_id` is propagated in pagination links so every page
    navigation lands on the same snapshot until the TTL expires.
 
+## Supported Versions
+
+| Dependency | Supported |
+|---|---|
+| Ruby | >= 3.1 |
+| Rails (railties / activesupport) | >= 7.0 |
+| Kaminari | ~> 1.2 |
+| Pagy | 8.x and 9.x |
+
+Pagy 43+ is a ground-up rewrite of Pagy and requires a dedicated
+adapter — tracked in
+[#5](https://github.com/yebihara/riffle/issues/5). When an unsupported
+Pagy version is detected, Riffle logs a warning and skips the Pagy
+adapter instead of breaking your app (the Kaminari adapter and Core API
+are unaffected).
+
+Note that Pagy renamed the page-size variable from `:items` (Pagy 8) to
+`:limit` (Pagy 9). `pagy_riffle` follows the convention of your
+installed Pagy version.
+
 ## Installation
 
 Add to your Gemfile:

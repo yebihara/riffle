@@ -39,5 +39,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "activerecord", ">= 6.0"
   spec.add_development_dependency "sqlite3", ">= 1.4"
   spec.add_development_dependency "kaminari", "~> 1.2"
-  spec.add_development_dependency "pagy", "~> 8.0"
+  spec.add_development_dependency "pagy", ">= 8.0", "< 10"
 end

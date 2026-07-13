@@ -11,8 +11,13 @@ module Riffle
         end
 
         if defined?(::Pagy)
-          require "riffle/adapters/pagy/backend"
-          include Riffle::Adapters::Pagy::Backend
+          require "riffle/adapters/pagy/compat"
+          if Riffle::Adapters::Pagy.supported?
+            require "riffle/adapters/pagy/backend"
+            include Riffle::Adapters::Pagy::Backend
+          else
+            Riffle::Adapters::Pagy.warn_unsupported
+          end
         end
       end
 
@@ -30,8 +35,13 @@ module Riffle
         end
 
         if defined?(::Pagy)
-          require "riffle/adapters/pagy/frontend"
-          prepend Riffle::Adapters::Pagy::Frontend
+          require "riffle/adapters/pagy/compat"
+          if Riffle::Adapters::Pagy.supported?
+            require "riffle/adapters/pagy/frontend"
+            prepend Riffle::Adapters::Pagy::Frontend
+          else
+            Riffle::Adapters::Pagy.warn_unsupported
+          end
         end
       end
     end

@@ -99,7 +99,7 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.0-x86_64-linux-musl)
       racc (~> 1.4)
-    pagy (8.6.3)
+    pagy (9.4.0)
     pp (0.6.3)
       prettyprint
     prettyprint (0.2.0)
@@ -191,7 +191,7 @@ DEPENDENCIES
   bundler (>= 2.0)
   kaminari (~> 1.2)
   mock_redis (~> 0.49)
-  pagy (~> 8.0)
+  pagy (>= 8.0, < 10)
   rake (>= 13.0)
   riffle!
   rspec (~> 3.0)

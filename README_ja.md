@@ -90,6 +90,25 @@ Ruby/Railsネイティブで3つの性質をすべて満たす唯一の選択肢
 3. `cursor_id` をページネーションリンクに伝播することで、TTLが切れるまで
    全ページ移動が同一スナップショット上で行われる
 
+## サポートバージョン
+
+| 依存関係 | サポート範囲 |
+|---|---|
+| Ruby | >= 3.1 |
+| Rails (railties / activesupport) | >= 7.0 |
+| Kaminari | ~> 1.2 |
+| Pagy | 8.x および 9.x |
+
+Pagy 43以降は全面的に書き換えられており、専用アダプタが必要です
+（[#5](https://github.com/yebihara/riffle/issues/5) で対応予定）。
+未サポートのPagyバージョンを検出した場合、Riffleは警告をログに出力して
+Pagyアダプタの読み込みをスキップします（アプリは壊れません。Kaminari
+アダプタとCore APIには影響しません）。
+
+なお、Pagyはページサイズ変数を `:items`（Pagy 8）から `:limit`（Pagy 9）
+に改名しています。`pagy_riffle` はインストールされているPagyバージョンの
+流儀に従います。
+
 ## インストール
 
 Gemfileに追加:

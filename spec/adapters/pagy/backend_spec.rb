@@ -6,6 +6,8 @@ require_relative "../../support/active_record"
 
 RSpec.describe Riffle::Adapters::Pagy::Backend do
   let(:store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 1000) }
+  # :limit on Pagy 9+, :items on Pagy 8 — keeps this spec green on both.
+  let(:limit_key) { Riffle::Adapters::Pagy.limit_var }
 
   let(:controller_class) do
     Class.new do
@@ -25,7 +27,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
   end
 
   describe "#pagy_riffle (no cursor_id provided)" do
-    let(:controller) { controller_class.new(page: 1, items: 5) }
+    let(:controller) { controller_class.new(page: 1, limit_key => 5) }
 
     it "returns a Pagy instance and a page of records" do
       pagy, records = controller.pagy_riffle(User.order(:name))
@@ -50,7 +52,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
   end
 
   describe "#pagy_riffle when cursor_id is expired/unknown" do
-    let(:controller) { controller_class.new(page: 1, items: 5, cursor_id: "never-existed") }
+    let(:controller) { controller_class.new(page: 1, limit_key => 5, cursor_id: "never-existed") }
 
     it "creates a new cursor under :auto (default)" do
       pagy, _ = controller.pagy_riffle(User.order(:name))
@@ -69,7 +71,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
 
     it "still creates a fresh cursor under :strict when no cursor_id is given" do
       Riffle.config.on_cursor_expired = :strict
-      ctrl = controller_class.new(page: 1, items: 5)  # no cursor_id at all
+      ctrl = controller_class.new(page: 1, limit_key => 5)  # no cursor_id at all
       expect {
         ctrl.pagy_riffle(User.order(:name))
       }.not_to raise_error
@@ -79,13 +81,13 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
   end
 
   describe "#pagy_riffle (with existing cursor_id)" do
-    let(:initial_controller) { controller_class.new(page: 1, items: 5) }
+    let(:initial_controller) { controller_class.new(page: 1, limit_key => 5) }
 
     it "reuses the same cursor across page navigation" do
       pagy1, _ = initial_controller.pagy_riffle(User.order(:name))
       cursor_id = pagy1.riffle_cursor_id
 
-      next_controller = controller_class.new(page: 2, items: 5, cursor_id: cursor_id)
+      next_controller = controller_class.new(page: 2, limit_key => 5, cursor_id: cursor_id)
       pagy2, records2 = next_controller.pagy_riffle(User.order(:name))
 
       expect(pagy2.riffle_cursor_id).to eq(cursor_id)
@@ -99,7 +101,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
       # Insert a row that would sort to the front
       User.create!(name: "user-AAA")  # would be at top alphabetically? Actually 'A' < 'a' in ASCII
 
-      next_controller = controller_class.new(page: 1, items: 3, cursor_id: cursor_id)
+      next_controller = controller_class.new(page: 1, limit_key => 3, cursor_id: cursor_id)
       _, records = next_controller.pagy_riffle(User.order(:name))
 
       expect(records.map(&:name)).not_to include("user-AAA")
@@ -113,7 +115,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
     end
 
     it "preserves includes(:profile) across page navigation (no N+1)" do
-      ctrl1 = controller_class.new(page: 1, items: 5)
+      ctrl1 = controller_class.new(page: 1, limit_key => 5)
       pagy1, records1 = ctrl1.pagy_riffle(User.includes(:profile).order(:name))
 
       # Verify associations are loaded for first page (this is just a sanity check)
@@ -121,7 +123,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
 
       # Page 2 with cursor_id - this is the path that previously dropped includes
       ctrl2 = controller_class.new(
-        page: 2, items: 5, cursor_id: pagy1.riffle_cursor_id
+        page: 2, limit_key => 5, cursor_id: pagy1.riffle_cursor_id
       )
       _, records2 = ctrl2.pagy_riffle(User.includes(:profile).order(:name))
 
@@ -135,7 +137,7 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
     end
 
     it "paginates UUID-keyed records correctly" do
-      ctrl = controller_class.new(page: 1, items: 3)
+      ctrl = controller_class.new(page: 1, limit_key => 3)
       pagy, records = ctrl.pagy_riffle(UuidRecord.order(:uuid))
 
       expect(records.map(&:uuid)).to eq(%w[a-1 b-2 c-3])
@@ -143,11 +145,11 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
     end
 
     it "preserves UUID identity on subsequent pages via cursor" do
-      ctrl1 = controller_class.new(page: 1, items: 3)
+      ctrl1 = controller_class.new(page: 1, limit_key => 3)
       pagy1, _ = ctrl1.pagy_riffle(UuidRecord.order(:uuid))
 
       ctrl2 = controller_class.new(
-        page: 2, items: 3, cursor_id: pagy1.riffle_cursor_id
+        page: 2, limit_key => 3, cursor_id: pagy1.riffle_cursor_id
       )
       _, records2 = ctrl2.pagy_riffle(UuidRecord.order(:uuid))
 

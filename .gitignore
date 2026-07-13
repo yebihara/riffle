@@ -13,3 +13,6 @@
 # Internal notes (not published)
 /.evaluation/
 /docs/qiita_article.md
+
+# Version-matrix lockfiles
+/gemfiles/*.gemfile.lock

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Pagy 9 support: the adapter now detects the installed Pagy major and uses `:limit` (Pagy 9) or `:items` (Pagy 8) for the page-size var, request param, and `Pagy.new` keyword ([#1](https://github.com/yebihara/riffle/issues/1)).
+- `Riffle::Adapters::Pagy.supported?` / `.limit_var` version shim. Unsupported Pagy majors (7 and below, 43 and above) log a warning and skip Pagy adapter setup instead of failing at runtime; Pagy 43 support is tracked in [#5](https://github.com/yebihara/riffle/issues/5).
+- `gemfiles/pagy_8.gemfile` and `gemfiles/pagy_9.gemfile` for running the suite against each supported Pagy major.
 - Configurable Redis key prefix via `Configuration#redis_key_prefix` (default `"riffle"`) and `Store::Redis.new(key_prefix: ...)` per-instance override.
 - `PageFetcher.new(relation:)` keyword to preserve `includes` / `joins` / `select` / additional `where` clauses across page navigation. `model_class:` continues to work for the legacy no-scope path.
 - `Configuration#on_max_ids_exceeded` (`:truncate` default, `:raise` opt-in) plus a `truncated` flag persisted alongside the cursor and exposed via `Store::Base#truncated?` and `PageFetcher::Result#truncated?`.

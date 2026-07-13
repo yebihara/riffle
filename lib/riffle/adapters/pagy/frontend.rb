@@ -4,8 +4,12 @@ module Riffle
   module Adapters
     module Pagy
       module Frontend
-        # Override pagy_url_for to include cursor_id
-        def pagy_url_for(pagy, page, absolute: false, html_escaped: false)
+        # Override pagy_url_for to include cursor_id.
+        #
+        # Keyword args are passed through untouched (Pagy 8/9 accept
+        # absolute: and swallow unknown keywords), so this override stays
+        # signature-compatible across the supported Pagy versions.
+        def pagy_url_for(pagy, page, **opts)
           cursor_id = pagy.respond_to?(:riffle_cursor_id) ? pagy.riffle_cursor_id : nil
 
           if cursor_id
@@ -13,7 +17,7 @@ module Riffle
             cursor_param = Riffle.config.cursor_param
             separator = url.include?("?") ? "&" : "?"
             url = "#{url}#{separator}#{cursor_param}=#{cursor_id}"
-            html_escaped ? url.gsub("&", "&amp;") : url
+            opts[:html_escaped] ? url.gsub("&", "&amp;") : url
           else
             super
           end

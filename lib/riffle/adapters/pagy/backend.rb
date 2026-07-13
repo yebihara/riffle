@@ -1,20 +1,23 @@
 # frozen_string_literal: true
 
+require "riffle/adapters/pagy/compat"
+
 module Riffle
   module Adapters
     module Pagy
       module Backend
         # Paginate with riffle cursor support
         # @param collection [ActiveRecord::Relation] the collection to paginate
-        # @param vars [Hash] pagy options
+        # @param vars [Hash] pagy options (:limit on Pagy 9+, :items on Pagy 8)
         # @return [Array(Pagy, Array)] pagy instance and records
         def pagy_riffle(collection, vars = {})
           vars = pagy_riffle_get_vars(collection, vars)
 
           cursor_id = params[Riffle.config.cursor_param]
           store = Riffle.store
+          limit_var = Riffle::Adapters::Pagy.limit_var
           page = vars[:page] || 1
-          items = vars[:items] || ::Pagy::DEFAULT[:items]
+          items = vars[limit_var] || Riffle::Adapters::Pagy.default_limit
 
           cursor = Riffle::Core::Cursor.find(cursor_id, store: store) if cursor_id.present?
 
@@ -34,8 +37,8 @@ module Riffle
           pagy = ::Pagy.new(
             count: result[:total_count],
             page: page,
-            items: items,
-            **vars.except(:count, :page, :items)
+            limit_var => items,
+            **vars.except(:count, :page, limit_var)
           )
 
           # Store cursor_id in pagy for view helpers
@@ -47,8 +50,9 @@ module Riffle
         private
 
         def pagy_riffle_get_vars(collection, vars)
+          limit_var = Riffle::Adapters::Pagy.limit_var
           vars[:page] ||= params[:page]&.to_i || 1
-          vars[:items] ||= params[:items]&.to_i if params[:items].present?
+          vars[limit_var] ||= params[limit_var]&.to_i if params[limit_var].present?
           vars
         end
 
