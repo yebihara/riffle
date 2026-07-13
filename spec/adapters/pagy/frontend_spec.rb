@@ -37,7 +37,9 @@ RSpec.describe Riffle::Adapters::Pagy::Frontend do
   end
   let(:pagy_without_cursor) { Object.new }
 
-  describe "#pagy_url_for" do
+  # pagy_url_for was removed in Pagy 43 (cursor_id is carried by the :querify
+  # option in the backend instead), so this override only exists on 8/9.
+  describe "#pagy_url_for", if: !Riffle::Adapters::Pagy.v43? do
     it "appends cursor_id when the pagy carries riffle_cursor_id" do
       result = helper.pagy_url_for(pagy_with_cursor, 2)
       expect(result).to eq("/users?page=2&cursor_id=#{cursor_id}")

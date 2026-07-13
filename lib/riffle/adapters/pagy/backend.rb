@@ -2,89 +2,11 @@
 
 require "riffle/adapters/pagy/compat"
 
-module Riffle
-  module Adapters
-    module Pagy
-      module Backend
-        # Paginate with riffle cursor support
-        # @param collection [ActiveRecord::Relation] the collection to paginate
-        # @param vars [Hash] pagy options (:limit on Pagy 9+, :items on Pagy 8)
-        # @return [Array(Pagy, Array)] pagy instance and records
-        def pagy_riffle(collection, vars = {})
-          vars = pagy_riffle_get_vars(collection, vars)
-
-          cursor_id = params[Riffle.config.cursor_param]
-          store = Riffle.store
-          limit_var = Riffle::Adapters::Pagy.limit_var
-          page = vars[:page] || 1
-          items = vars[limit_var] || Riffle::Adapters::Pagy.default_limit
-
-          cursor = Riffle::Core::Cursor.find(cursor_id, store: store) if cursor_id.present?
-
-          base_scope = collection.except(:limit, :offset)
-
-          if cursor
-            result = fetch_from_cursor(cursor, base_scope, page, items, store)
-          elsif cursor_id.present? && Riffle.config.on_cursor_expired == :strict
-            # The caller passed a cursor_id but it no longer exists.
-            # Strict mode surfaces this so the app can redirect to a fresh
-            # search instead of silently creating a different snapshot.
-            raise Riffle::CursorExpired, "Cursor '#{cursor_id}' has expired"
-          else
-            result = fetch_with_new_cursor(base_scope, page, items, store)
-          end
-
-          pagy = ::Pagy.new(
-            count: result[:total_count],
-            page: page,
-            limit_var => items,
-            **vars.except(:count, :page, limit_var)
-          )
-
-          # Store cursor_id in pagy for view helpers
-          pagy.define_singleton_method(:riffle_cursor_id) { result[:cursor_id] }
-
-          [pagy, result[:records]]
-        end
-
-        private
-
-        def pagy_riffle_get_vars(collection, vars)
-          limit_var = Riffle::Adapters::Pagy.limit_var
-          vars[:page] ||= params[:page]&.to_i || 1
-          vars[limit_var] ||= params[limit_var]&.to_i if params[limit_var].present?
-          vars
-        end
-
-        def fetch_from_cursor(cursor, base_scope, page, items, store)
-          snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
-          result = fetcher.fetch(page: page, per_page: items)
-
-          {
-            records: result.records,
-            total_count: result.total_count,
-            cursor_id: result.cursor_id
-          }
-        end
-
-        def fetch_with_new_cursor(base_scope, page, items, store)
-          all_ids = base_scope.pluck(base_scope.klass.primary_key)
-          total = all_ids.size
-
-          cursor = Riffle::Core::Cursor.create(all_ids, total_count: total, store: store)
-
-          snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
-          result = fetcher.fetch(page: page, per_page: items)
-
-          {
-            records: result.records,
-            total_count: result.total_count,
-            cursor_id: cursor.id
-          }
-        end
-      end
-    end
-  end
+# Loads the Pagy backend implementation matching the installed Pagy major and
+# defines Riffle::Adapters::Pagy::Backend. Pagy 43 rewrote the pagination API,
+# so it needs a separate implementation from the 8/9 (Pagy::Backend) era.
+if Riffle::Adapters::Pagy.v43?
+  require "riffle/adapters/pagy/backend_v43"
+else
+  require "riffle/adapters/pagy/backend_legacy"
 end

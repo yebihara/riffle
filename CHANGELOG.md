@@ -8,10 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- GitHub Actions CI: runs the suite on Pagy 8 and 9 with a real Redis service container ([#2](https://github.com/yebihara/riffle/issues/2)). The Redis store spec now honors `REDIS_URL` to run against a real server instead of mock_redis.
+- GitHub Actions CI: runs the suite on Pagy 8, 9, and 43 with a real Redis service container ([#2](https://github.com/yebihara/riffle/issues/2)). The Redis store spec now honors `REDIS_URL` to run against a real server instead of mock_redis.
 - Pagy 9 support: the adapter now detects the installed Pagy major and uses `:limit` (Pagy 9) or `:items` (Pagy 8) for the page-size var, request param, and `Pagy.new` keyword ([#1](https://github.com/yebihara/riffle/issues/1)).
-- `Riffle::Adapters::Pagy.supported?` / `.limit_var` version shim. Unsupported Pagy majors (7 and below, 43 and above) log a warning and skip Pagy adapter setup instead of failing at runtime; Pagy 43 support is tracked in [#5](https://github.com/yebihara/riffle/issues/5).
-- `gemfiles/pagy_8.gemfile` and `gemfiles/pagy_9.gemfile` for running the suite against each supported Pagy major.
+- Pagy 43 support: a dedicated adapter (`backend_v43.rb` / `frontend_v43.rb`) built on the rewritten API — `Pagy::Offset` + `Pagy::Request` instead of `Pagy::Backend`, and the `:querify` option instead of the removed `pagy_url_for` to carry `cursor_id` into page links. `pagy_riffle(collection, **options)` mirrors the native `pagy(:offset, ...)` signature ([#5](https://github.com/yebihara/riffle/issues/5)). Pagy 43 requires Ruby >= 3.3.
+- `Riffle::Adapters::Pagy.supported?` / `.limit_var` / `.v43?` version shim. Unsupported Pagy majors (7 and below, 10–42, 44 and above) log a warning and skip Pagy adapter setup instead of failing at runtime.
+- `gemfiles/pagy_8.gemfile`, `gemfiles/pagy_9.gemfile`, and `gemfiles/pagy_43.gemfile` for running the suite against each supported Pagy major.
 - Configurable Redis key prefix via `Configuration#redis_key_prefix` (default `"riffle"`) and `Store::Redis.new(key_prefix: ...)` per-instance override.
 - `PageFetcher.new(relation:)` keyword to preserve `includes` / `joins` / `select` / additional `where` clauses across page navigation. `model_class:` continues to work for the legacy no-scope path.
 - `Configuration#on_max_ids_exceeded` (`:truncate` default, `:raise` opt-in) plus a `truncated` flag persisted alongside the cursor and exposed via `Store::Base#truncated?` and `PageFetcher::Result#truncated?`.

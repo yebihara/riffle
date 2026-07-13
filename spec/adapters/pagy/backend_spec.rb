@@ -9,14 +9,37 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
   # :limit on Pagy 9+, :items on Pagy 8 — keeps this spec green on both.
   let(:limit_key) { Riffle::Adapters::Pagy.limit_var }
 
+  # The controller stub differs by Pagy major. On 8/9 pagy_riffle reads the
+  # controller's #params; on 43 it sources page/limit/cursor_id from a
+  # Pagy::Request built from #request (a plain hash is accepted, string keys).
   let(:controller_class) do
-    Class.new do
-      include ::Pagy::Backend
-      include Riffle::Adapters::Pagy::Backend
-      attr_accessor :params
+    if Riffle::Adapters::Pagy.v43?
+      Class.new do
+        include Riffle::Adapters::Pagy::Backend
+        attr_accessor :params
 
-      def initialize(params = {})
-        @params = params
+        def initialize(params = {})
+          @params = params
+        end
+
+        # Pagy 43 accepts a plain Hash request (base_url/path/params).
+        def request
+          {
+            base_url: "http://example.com",
+            path: "/users",
+            params: @params.transform_keys(&:to_s)
+          }
+        end
+      end
+    else
+      Class.new do
+        include ::Pagy::Backend
+        include Riffle::Adapters::Pagy::Backend
+        attr_accessor :params
+
+        def initialize(params = {})
+          @params = params
+        end
       end
     end
   end
@@ -128,6 +151,29 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
       _, records2 = ctrl2.pagy_riffle(User.includes(:profile).order(:name))
 
       expect(records2.first.association(:profile)).to be_loaded
+    end
+  end
+
+  describe "cursor_id propagation into page links (Pagy 43)", if: Riffle::Adapters::Pagy.v43? do
+    it "injects cursor_id into page_url via the :querify option" do
+      ctrl = controller_class.new(page: 1, limit_key => 5)
+      pagy, _ = ctrl.pagy_riffle(User.order(:name))
+
+      url = pagy.page_url(2)
+      expect(url).to include("cursor_id=#{pagy.riffle_cursor_id}")
+      expect(url).to include("page=2")
+    end
+
+    it "preserves a user-supplied :querify lambda" do
+      ctrl = controller_class.new(page: 1, limit_key => 5)
+      pagy, _ = ctrl.pagy_riffle(
+        User.order(:name),
+        querify: ->(params) { params["extra"] = "kept" }
+      )
+
+      url = pagy.page_url(2)
+      expect(url).to include("extra=kept")
+      expect(url).to include("cursor_id=#{pagy.riffle_cursor_id}")
     end
   end
 

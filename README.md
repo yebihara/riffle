@@ -131,21 +131,27 @@ guarantee.
 
 | Dependency | Supported |
 |---|---|
-| Ruby | >= 3.1 |
+| Ruby | >= 3.1 (>= 3.3 for Pagy 43) |
 | Rails (railties / activesupport) | >= 7.0 |
 | Kaminari | ~> 1.2 |
-| Pagy | 8.x and 9.x |
+| Pagy | 8.x, 9.x, and 43.x |
 
-Pagy 43+ is a ground-up rewrite of Pagy and requires a dedicated
-adapter — tracked in
-[#5](https://github.com/yebihara/riffle/issues/5). When an unsupported
-Pagy version is detected, Riffle logs a warning and skips the Pagy
-adapter instead of breaking your app (the Kaminari adapter and Core API
-are unaffected).
+Pagy 43 is a ground-up rewrite (`Pagy::Backend` / `Pagy::Frontend` and
+`pagy_url_for` are gone, replaced by `Pagy::Offset` and the `:querify`
+option). Riffle ships a dedicated adapter for it, so `pagy_riffle` works
+the same across all supported Pagy majors. Pagy 43 itself requires Ruby
+>= 3.3.
+
+When an unsupported Pagy version is detected, Riffle logs a warning and
+skips the Pagy adapter instead of breaking your app (the Kaminari
+adapter and Core API are unaffected).
 
 Note that Pagy renamed the page-size variable from `:items` (Pagy 8) to
-`:limit` (Pagy 9). `pagy_riffle` follows the convention of your
-installed Pagy version.
+`:limit` (Pagy 9, kept in 43). `pagy_riffle` follows the convention of
+your installed Pagy version. On Pagy 43, `pagy_riffle` accepts keyword
+options (`pagy_riffle(collection, **options)`) mirroring the native
+`pagy(:offset, ...)` call, and cursor_id is carried into page links
+automatically via the `:querify` option.
 
 ## Installation
 

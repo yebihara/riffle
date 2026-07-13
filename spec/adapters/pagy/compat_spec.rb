@@ -15,9 +15,25 @@ RSpec.describe Riffle::Adapters::Pagy do
       expect(described_class.supported?).to be true
     end
 
-    it "is false for Pagy 43 and other unsupported majors" do
+    it "is true for Pagy 43" do
       allow(described_class).to receive(:pagy_major).and_return(43)
+      expect(described_class.supported?).to be true
+    end
+
+    it "is false for unsupported majors (e.g. 7 and 44)" do
+      allow(described_class).to receive(:pagy_major).and_return(7)
       expect(described_class.supported?).to be false
+      allow(described_class).to receive(:pagy_major).and_return(44)
+      expect(described_class.supported?).to be false
+    end
+  end
+
+  describe ".v43?" do
+    it "is true only for Pagy 43+" do
+      allow(described_class).to receive(:pagy_major).and_return(43)
+      expect(described_class.v43?).to be true
+      allow(described_class).to receive(:pagy_major).and_return(9)
+      expect(described_class.v43?).to be false
     end
   end
 

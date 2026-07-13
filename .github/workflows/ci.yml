@@ -14,6 +14,7 @@ jobs:
         gemfile:
           - Gemfile # pagy 9
           - gemfiles/pagy_8.gemfile
+          - gemfiles/pagy_43.gemfile # pagy 43 (requires Ruby >= 3.3)
     env:
       BUNDLE_GEMFILE: ${{ github.workspace }}/${{ matrix.gemfile }}
       # Points the Redis store spec at the service container so it runs
