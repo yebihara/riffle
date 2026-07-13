@@ -1,16 +1,41 @@
 # frozen_string_literal: true
 
+require "riffle/error"
 require "riffle/adapters/pagy/compat"
 
 # Loads the Pagy backend implementation matching the installed Pagy major and
 # defines Riffle::Adapters::Pagy::Backend. Pagy 43 rewrote the pagination API,
 # so it needs a separate implementation from the 8/9 (Pagy::Backend) era.
-#
-# When Pagy is not loaded yet we cannot know the version, so fall back to the
-# legacy module — it references ::Pagy only at call time, so merely requiring
-# this file stays side-effect-free (the real entry points require Pagy first).
-if defined?(::Pagy) && Riffle::Adapters::Pagy.v43?
-  require "riffle/adapters/pagy/backend_v43"
+if defined?(::Pagy)
+  if Riffle::Adapters::Pagy.v43?
+    require "riffle/adapters/pagy/backend_v43"
+  else
+    require "riffle/adapters/pagy/backend_legacy"
+  end
 else
-  require "riffle/adapters/pagy/backend_legacy"
+  # Pagy is not loaded yet, so the right implementation cannot be chosen —
+  # silently defaulting to one of them would mis-bind apps that require this
+  # file before pagy. Instead, resolve on the first pagy_riffle call:
+  # requiring the implementation file reopens this module and replaces this
+  # method, so the recursive call dispatches to the real implementation.
+  module Riffle
+    module Adapters
+      module Pagy
+        module Backend
+          def pagy_riffle(collection, vars = {}, **options)
+            unless defined?(::Pagy)
+              raise Riffle::ConfigurationError,
+                    "pagy_riffle needs the pagy gem: require \"pagy\" before calling it"
+            end
+
+            impl = Riffle::Adapters::Pagy.v43? ? "backend_v43" : "backend_legacy"
+            require "riffle/adapters/pagy/#{impl}"
+
+            combined = vars.empty? ? options : vars.merge(options)
+            pagy_riffle(collection, combined)
+          end
+        end
+      end
+    end
+  end
 end

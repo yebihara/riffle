@@ -6,7 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ### Added
 - GitHub Actions CI: runs the suite on Pagy 8, 9, and 43 with a real Redis service container ([#2](https://github.com/yebihara/riffle/issues/2)). The Redis store spec now honors `REDIS_URL` to run against a real server instead of mock_redis.
 - Pagy 9 support: the adapter now detects the installed Pagy major and uses `:limit` (Pagy 9) or `:items` (Pagy 8) for the page-size var, request param, and `Pagy.new` keyword ([#1](https://github.com/yebihara/riffle/issues/1)).
@@ -31,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bumped minimum Ruby to 3.1 and minimum Rails (railties / activesupport) to 7.0; older versions are EOL.
 
 ### Fixed
+- Pagy 43 adapter: `?page=0` / negative / non-numeric page params render page 1 again (clamped like `Pagy::Request#resolve_page`) instead of raising `Pagy::OptionError`; page/limit params nested under `:root_key` (JSON:API style) are resolved again; an explicitly passed `request:` option is no longer shadowed by the surrounding controller's `#params`; the params-fallback now delegates to `Pagy::Request#resolve_page` / `#resolve_limit` instead of re-implementing their resolution rules.
+- Requiring `riffle/adapters/pagy/backend` before the pagy gem no longer silently binds the 8/9 implementation: the dispatcher defers the version check to the first `pagy_riffle` call (and raises a clear `Riffle::ConfigurationError` if pagy is still absent). The frontend falls back to the legacy module, which is a safe superset on Pagy 43.
 - **UUID / custom string primary keys are no longer corrupted** on the Redis store path (issue #001).
 - **Original relation scope** (`includes`, `select`, `joins`, additional `where`) is preserved across page navigation; previous behavior issued the per-page WHERE against the bare model class, dropping all scope and causing N+1 (issue #002).
 - Redis Cluster compatibility: MULTI blocks no longer trip CROSSSLOT (issue #003).

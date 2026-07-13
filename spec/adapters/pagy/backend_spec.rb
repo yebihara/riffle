@@ -301,6 +301,42 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
     end
   end
 
+  describe "request param edge cases (Pagy 43)", if: Riffle::Adapters::Pagy.v43? do
+    it "renders page 1 for ?page=0 instead of raising Pagy::OptionError" do
+      ctrl = controller_class.new(page: "0", limit_key => 5)
+      pagy, records = ctrl.pagy_riffle(User.order(:name))
+
+      expect(pagy.page).to eq(1)
+      expect(records.map(&:name).first).to eq("user-00")
+    end
+
+    it "renders page 1 for a negative or non-numeric page param" do
+      %w[-1 abc].each do |bad|
+        pagy, = controller_class.new(page: bad, limit_key => 5).pagy_riffle(User.order(:name))
+        expect(pagy.page).to eq(1)
+      end
+    end
+
+    it "resolves page/limit nested under :root_key (JSON:API style)" do
+      ctrl = controller_class.new(page: { page: "2", limit: "5" })
+      pagy, records = ctrl.pagy_riffle(User.order(:name), root_key: "page")
+
+      expect(pagy.page).to eq(2)
+      expect(pagy.limit).to eq(5)
+      expect(records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+    end
+
+    it "prefers an explicitly passed :request over the controller params" do
+      ctrl = controller_class.new(page: "1")  # controller request says page 1
+      custom = { base_url: "http://example.com", path: "/users",
+                 params: { "page" => "2", "limit" => "5" } }
+      pagy, records = ctrl.pagy_riffle(User.order(:name), request: custom)
+
+      expect(pagy.page).to eq(2)
+      expect(records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+    end
+  end
+
   describe "with UUID primary key" do
     before do
       %w[a-1 b-2 c-3 d-4 e-5].each { |id| UuidRecord.create!(uuid: id, label: "L-#{id}") }

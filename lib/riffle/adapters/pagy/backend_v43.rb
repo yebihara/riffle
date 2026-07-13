@@ -37,11 +37,16 @@ module Riffle
           merged[:request] ||= pagy_riffle_request_source
           req = ::Pagy::Request.new(merged)
 
+          # When the caller explicitly passed a :request option, it is the
+          # single source of truth for params — the surrounding controller's
+          # #params must not shadow it.
+          explicit_request = call_options.key?(:request)
+
           cursor_param = Riffle.config.cursor_param
-          cursor_id = pagy_riffle_param(req, cursor_param)
-          page = pagy_riffle_page(call_options, merged, req)
+          cursor_id = pagy_riffle_cursor_id(req, cursor_param, explicit_request)
+          page = pagy_riffle_page(call_options, merged, req, explicit_request)
           limit_key = (merged[:limit_key] || ::Pagy::DEFAULT[:limit_key]).to_s
-          items, limit_from_param = pagy_riffle_limit(call_options, merged, req, limit_key)
+          items, limit_from_param = pagy_riffle_limit(call_options, merged, req, limit_key, explicit_request)
 
           store = Riffle.store
           base_scope = collection.except(:limit, :offset)
@@ -93,56 +98,87 @@ module Riffle
           hash.respond_to?(:transform_keys) ? hash.transform_keys(&:to_s) : hash.to_h
         end
 
-        # Look up an incoming request value by key, tolerating Symbol/String
-        # keys. Prefer the controller #params — it carries JSON-body params
-        # that Pagy::Request#params (GET.merge(POST)) would miss — then fall
-        # back to the Pagy::Request params.
-        def pagy_riffle_param(req, key)
-          sym = key.to_sym
-          str = key.to_s
-
-          if respond_to?(:params) && !params.nil?
-            value = params[sym]
-            value = params[str] if value.nil?
+        # Look up the cursor_id param. Prefer the controller #params — it
+        # carries JSON-body params that Pagy::Request#params
+        # (GET.merge(POST)) would miss — unless an explicit :request was
+        # given. cursor_id is riffle's own param and always lives at the top
+        # level (never nested under :root_key).
+        def pagy_riffle_cursor_id(req, cursor_param, explicit_request)
+          unless explicit_request
+            value = pagy_riffle_controller_param(nil, cursor_param)
             return value unless value.nil?
           end
 
           rp = req.params
-          value = rp[str]
-          value = rp[sym] if value.nil?
-          value
+          value = rp[cursor_param.to_s]
+          value.nil? ? rp[cursor_param.to_sym] : value
         end
 
-        def pagy_riffle_page(call_options, merged, req)
+        # Controller #params lookup honoring :root_key (JSON:API-style
+        # nesting), tolerating Symbol/String keys. Returns nil when the
+        # caller has no #params or the key is absent.
+        def pagy_riffle_controller_param(root_key, key)
+          return nil unless respond_to?(:params) && !params.nil?
+
+          container = params
+          if root_key
+            container = params[root_key.to_s]
+            container = params[root_key.to_sym] if container.nil?
+            return nil unless container.respond_to?(:[]) && !container.is_a?(String)
+          end
+
+          value = container[key.to_sym]
+          value.nil? ? container[key.to_s] : value
+        end
+
+        # Resolve the page. An explicit per-call :page wins (native Pagy also
+        # bypasses request resolution then); otherwise the controller params
+        # (unless an explicit :request was given), clamped to >= 1 so that
+        # ?page=0 / ?page=abc render page 1 instead of raising
+        # Pagy::OptionError; otherwise Pagy::Request#resolve_page, which
+        # applies the same :root_key digging and clamping natively.
+        def pagy_riffle_page(call_options, merged, req, explicit_request)
           return call_options[:page].to_i if call_options[:page]
 
-          page_key = merged[:page_key] || ::Pagy::DEFAULT[:page_key]
-          value = pagy_riffle_param(req, page_key)
-          value.to_s.empty? ? 1 : value.to_i
+          unless explicit_request
+            page_key = (merged[:page_key] || ::Pagy::DEFAULT[:page_key]).to_s
+            raw = pagy_riffle_controller_param(merged[:root_key], page_key)
+            return [raw.to_s.to_i, 1].max unless raw.nil? || raw.to_s.empty?
+          end
+
+          req.resolve_page
         end
 
         # Resolve the page size and report whether it came from the request.
         #
-        # Precedence mirrors the 8/9 adapter: an explicit per-call :limit wins,
-        # then the request param (clamped by :max_limit like Pagy's own
-        # resolve_limit), then the merged/global option or Pagy default. The
-        # request param is checked before the merged default so a globally
-        # configured Pagy::OPTIONS[:limit] does not shadow ?limit=.
+        # Precedence mirrors the 8/9 adapter: an explicit per-call :limit
+        # wins; then the request param — honored unconditionally (riffle
+        # semantics; native resolve_limit only reads it when :max_limit is
+        # set) but clamped by :max_limit when given, and looked up with the
+        # same :root_key digging as resolve_limit; then
+        # Pagy::Request#resolve_limit for the merged/global default, so a
+        # configured Pagy::OPTIONS[:limit] never shadows ?limit=.
         #
         # @return [Array(Integer, Boolean)] the limit and whether it came from
         #   the request param (so it must be carried into page links)
-        def pagy_riffle_limit(call_options, merged, req, limit_key)
+        def pagy_riffle_limit(call_options, merged, req, limit_key, explicit_request)
           return [call_options[:limit].to_i, false] if call_options[:limit]
 
-          raw = pagy_riffle_param(req, limit_key)
+          raw = pagy_riffle_controller_param(merged[:root_key], limit_key) unless explicit_request
+          if raw.nil? || raw.to_s.empty?
+            rp = req.params
+            raw = rp.dig(merged[:root_key], limit_key) if merged[:root_key]
+            raw = rp[limit_key] if raw.nil?
+            raw = rp[limit_key.to_sym] if raw.nil?
+          end
+
           param_limit = raw.to_s.to_i
           if param_limit.positive?
             max_limit = merged[:max_limit]
-            clamped = max_limit ? [param_limit, max_limit.to_i].min : param_limit
-            return [clamped, true]
+            return [max_limit ? [param_limit, max_limit.to_i].min : param_limit, true]
           end
 
-          [(merged[:limit] || ::Pagy::DEFAULT[:limit]).to_i, false]
+          [req.resolve_limit.to_i, false]
         end
 
         # Build the :querify lambda that injects the current cursor_id (and,
