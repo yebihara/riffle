@@ -23,19 +23,11 @@ module Riffle
 
         def fetch_with_new_cursor(base_scope, page, items, store)
           all_ids = base_scope.pluck(base_scope.klass.primary_key)
-          total = all_ids.size
+          cursor = Riffle::Core::Cursor.create(all_ids, total_count: all_ids.size, store: store)
 
-          cursor = Riffle::Core::Cursor.create(all_ids, total_count: total, store: store)
-
-          snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
-          result = fetcher.fetch(page: page, per_page: items)
-
-          {
-            records: result.records,
-            total_count: result.total_count,
-            cursor_id: cursor.id
-          }
+          # Snapshot#cursor_id is @cursor.id, so the freshly created cursor's
+          # id flows through the Result — no need to duplicate the fetch here.
+          fetch_from_cursor(cursor, base_scope, page, items, store)
         end
 
         # Resolve the incoming cursor into a fetch result, applying the

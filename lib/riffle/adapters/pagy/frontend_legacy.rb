@@ -1,11 +1,16 @@
 # frozen_string_literal: true
 
+require "riffle/adapters/pagy/frontend_support"
+
 module Riffle
   module Adapters
     module Pagy
       # View helpers for Pagy 8 and 9. cursor_id is injected into page links
-      # by overriding pagy_url_for (which Pagy 43 removed).
+      # by overriding pagy_url_for (which Pagy 43 removed); the convenience
+      # helpers are shared with the 43 frontend via FrontendSupport.
       module Frontend
+        include FrontendSupport
+
         # Override pagy_url_for to include cursor_id.
         #
         # Keyword args are passed through untouched (Pagy 8/9 accept
@@ -23,20 +28,6 @@ module Riffle
           else
             super
           end
-        end
-
-        # Helper to get cursor_id from pagy instance
-        def riffle_cursor_id(pagy)
-          pagy.respond_to?(:riffle_cursor_id) ? pagy.riffle_cursor_id : nil
-        end
-
-        # Hidden field for forms that need to preserve cursor_id
-        def riffle_cursor_field(pagy)
-          cursor_id = riffle_cursor_id(pagy)
-          return unless cursor_id
-
-          cursor_param = Riffle.config.cursor_param
-          hidden_field_tag(cursor_param, cursor_id)
         end
       end
     end
