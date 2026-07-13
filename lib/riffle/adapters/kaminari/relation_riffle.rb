@@ -78,7 +78,33 @@ module Riffle
           self
         end
 
+        # Kaminari mixes its pagination modules in via .extending at .page
+        # time. When that happens AFTER .riffle, Kaminari's total_count shadows
+        # riffle's, so count-only code paths (which never hit the records-path
+        # guard) would silently report live counts. Re-run the ancestry check on
+        # the spawned relation so the mis-order fails loudly at the .page call
+        # itself. Re-extending modules that are already in the ancestry does not
+        # reorder them, so .page/.per on a correctly-ordered riffled relation
+        # passes through unchanged.
+        def extending(*modules, &block)
+          result = super
+          result.send(:riffle_assert_chain_order!)
+          result
+        end
+
         private
+
+        # Reset the memoized fetch result on clone/spawn (AR resets its own
+        # @records/@loaded here, but knows nothing of ours). Without this, a
+        # relation derived from a loaded riffle relation (.where / .per / .page)
+        # would silently return the parent's stale page. Cursor state and the
+        # bypass flag are configuration, not memoization — they must survive.
+        def initialize_copy(other)
+          super
+          @riffle_loaded = false
+          @riffle_records = nil
+          @riffle_total_count = nil
+        end
 
         def riffle_bypass?
           defined?(@riffle_bypass) && @riffle_bypass
@@ -90,7 +116,7 @@ module Riffle
           riffle_assert_chain_order!
 
           page_num = respond_to?(:current_page) ? (current_page || 1) : 1
-          per_page = limit_value || ::Kaminari.config.default_per_page
+          per_page = limit_value || riffle_default_per_page
           store = @riffle_store || Riffle.store
 
           # Drop pagination clauses and disarm riffle on the scope handed to the
@@ -106,14 +132,26 @@ module Riffle
           @riffle_loaded      = true
         end
 
+        # Kaminari-less Layer 1 usage must state a page size explicitly — there
+        # is no Kaminari default to fall back to, and inventing one here would
+        # hide the missing configuration.
+        def riffle_default_per_page
+          return ::Kaminari.config.default_per_page if defined?(::Kaminari)
+
+          raise Riffle::ConfigurationError,
+                "Riffle: no page size given — chain .limit(n) (or Kaminari's " \
+                ".per(n)) before .riffle, or install Kaminari to use its " \
+                "default_per_page"
+        end
+
         # Guard the chain-order requirement. When .riffle is applied BEFORE
         # .page, Kaminari's own total_count (mixed in at .page time) sits ahead
         # of this module in the singleton ancestry and wins, so total_count /
         # total_pages would silently report the live table count instead of the
-        # snapshot. Records still load correctly through this module, so this
-        # check runs on the records path and turns that silent wrong-count into
-        # a loud, actionable error. When .page was never called (Layer 1 without
-        # Kaminari pagination) there is nothing to shadow, so it is a no-op.
+        # snapshot. The #extending override fires this at the .page call itself;
+        # the riffle_load call is a second net for relations assembled some
+        # other way. When .page was never called (Layer 1 without Kaminari
+        # pagination) there is nothing to shadow, so it is a no-op.
         def riffle_assert_chain_order!
           return unless defined?(::Kaminari::ActiveRecordRelationMethods)
 

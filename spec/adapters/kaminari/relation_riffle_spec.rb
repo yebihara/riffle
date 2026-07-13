@@ -117,14 +117,55 @@ RSpec.describe Riffle::Adapters::Kaminari::RelationRiffle do
       expect(relation.records.map(&:name)).to eq(%w[user-00 user-01 user-02 user-03 user-04])
     end
 
-    it "raises a clear error when .riffle is applied before .page (misuse)" do
+    it "raises a clear error at .page time when .riffle is applied first (misuse)" do
       # Kaminari mixes total_count in at .page time; applied before .page, riffle
-      # loses the resolution and would silently report the live count. The guard
-      # surfaces this on the records path instead.
-      relation = User.order(:name).riffle(cursor: nil).page(1).per(5)
-      expect { relation.records }.to raise_error(
+      # loses the resolution and would silently report the live count — even on
+      # count-only paths that never read records. The extending override fails
+      # at the .page call itself, before any read.
+      expect { User.order(:name).riffle(cursor: nil).page(1) }.to raise_error(
         Riffle::ConfigurationError, /chain \.riffle AFTER \.page/
       )
+    end
+
+    it "allows .page on a correctly-ordered riffled relation (page navigation)" do
+      first = User.order(:name).page(1).per(5).riffle(cursor: nil)
+      first.records
+      # Kaminari's .page resets the limit to default_per_page, so .per must be
+      # re-chained — same as with a plain Kaminari relation.
+      second = first.page(2).per(5)
+
+      expect(second.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+    end
+  end
+
+  context "relations derived from a loaded riffle relation" do
+    # Memoized results must not leak through clone/spawn: a derived relation
+    # re-queries against the (cloned) cursor state instead of returning the
+    # parent's stale page.
+    it "re-queries when conditions are added after load" do
+      parent = User.order(:name).page(1).per(5).riffle(cursor: nil)
+      expect(parent.records.size).to eq(5)
+
+      derived = parent.where("name LIKE ?", "zzz%") # matches nothing
+      expect(derived.records).to eq([])
+    end
+
+    it "honors a page-size change after load" do
+      parent = User.order(:name).page(1).per(5).riffle(cursor: nil)
+      parent.records
+
+      resized = parent.per(3)
+      expect(resized.records.map(&:name)).to eq(%w[user-00 user-01 user-02])
+    end
+
+    it "stays on the same snapshot across derivation" do
+      parent = User.order(:name).page(1).per(5).riffle(cursor: nil)
+      parent.records
+      cursor_id = parent.riffle_cursor_id
+
+      resized = parent.per(3)
+      resized.records
+      expect(resized.riffle_cursor_id).to eq(cursor_id)
     end
   end
 
@@ -178,7 +219,6 @@ RSpec.describe Riffle::Adapters::Kaminari::RelationRiffle do
 
   context "multi-pagination (the motivating regression)" do
     before do
-      Post.delete_all
       20.times { |i| Post.create!(title: "post-#{i.to_s.rjust(2, '0')}") }
     end
 

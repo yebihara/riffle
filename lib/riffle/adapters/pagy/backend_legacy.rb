@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 require "riffle/adapters/pagy/compat"
-require "riffle/adapters/pagy/backend_support"
+require "riffle/adapters/fetch_support"
 
 module Riffle
   module Adapters
     module Pagy
       # pagy_riffle for Pagy 8 and 9 (the Pagy::Backend era).
       module Backend
-        include BackendSupport
+        include Riffle::Adapters::FetchSupport
 
         # Paginate with riffle cursor support
         # @param collection [ActiveRecord::Relation] the collection to paginate

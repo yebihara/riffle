@@ -54,7 +54,6 @@ RSpec.describe Riffle::Adapters::Kaminari::ControllerMethods do
     end
 
     it "keeps two collections independent when navigated separately" do
-      Post.delete_all
       20.times { |i| Post.create!(title: "post-#{i.to_s.rjust(2, '0')}") }
 
       c1 = controller_class.new(page: "1")

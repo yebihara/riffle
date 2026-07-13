@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "riffle/adapters/pagy/compat"
-require "riffle/adapters/pagy/backend_support"
+require "riffle/adapters/fetch_support"
 
 # Pagy::Request is not autoloaded by `require "pagy"` — it is pulled in by
 # Pagy::Method. We build the request object ourselves, so require it here.
@@ -22,7 +22,7 @@ module Riffle
       # and merges a :querify lambda that carries cursor_id (and the limit,
       # when it came from the request) into page links.
       module Backend
-        include BackendSupport
+        include Riffle::Adapters::FetchSupport
 
         # @param collection [ActiveRecord::Relation] the collection to paginate
         # @param vars [Hash] Pagy options passed positionally (8/9 calling style)
