@@ -9,3 +9,7 @@
 
 # rspec failure tracking
 .rspec_status
+
+# Internal notes (not published)
+/.evaluation/
+/docs/qiita_article.md
