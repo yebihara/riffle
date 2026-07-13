@@ -2,15 +2,15 @@
 
 [![CI](https://github.com/yebihara/riffle/actions/workflows/ci.yml/badge.svg)](https://github.com/yebihara/riffle/actions/workflows/ci.yml)
 
-**Application-level Repeatable Read for paginated queries** (an analogy — see
-[What Riffle Does NOT Freeze](#what-riffle-does-not-freeze) for how it differs).
+**Skip-free, duplicate-free pagination for Rails.**
 
-Riffle brings a database-Repeatable-Read-like guarantee to your Rails
-pagination. By caching the result-set ID list in Redis on the first
-request, it freezes the result set's **membership and order**, which
-eliminates the phantom and duplicate rows that inserts and reordering
-would otherwise cause across page navigation — no matter how many
-times a user navigates between pages.
+Riffle caches a search result's ID list in Redis on the first request
+and freezes the result set's **membership and order**. Page navigation
+then works against that stable snapshot: while a user pages through the
+results, no row is ever silently skipped or shown twice, and inserts or
+reordering elsewhere in the table cannot shift page boundaries
+mid-navigation. See [Precise Semantics](#precise-semantics) for the
+exact guarantees.
 
 As a side effect, it also solves the classic OFFSET deep-pagination
 performance problem: page navigation is `O(log N + page_size)`
@@ -27,7 +27,7 @@ testing without Redis.
 In typical Rails pagination, each page navigation issues an independent
 SQL query. Two well-known problems follow:
 
-### 1. Phantom reads across pages (correctness)
+### 1. Skipped and duplicated rows across pages (correctness)
 
 If records are inserted, deleted, or reordered between page 1 and
 page 2:
@@ -38,9 +38,9 @@ page 2:
   an insertion above it; the user sees it twice.
 - **Inconsistent counts**: total page count shifts mid-navigation.
 
-This is the *phantom read anomaly* — the same problem that DB
-isolation levels (Repeatable Read, Snapshot Isolation) exist to solve.
-But HTTP pagination spans multiple stateless requests, so a single DB
+Databases solve this class of anomaly *within a transaction* via
+isolation levels (Repeatable Read, Snapshot Isolation) — but HTTP
+pagination spans multiple stateless requests, so a single DB
 transaction cannot bridge them.
 
 ### 2. Deep pagination performance (latency)
@@ -61,15 +61,13 @@ identify that snapshot. Subsequent page navigation:
    reordered elsewhere in the table.
 
 The cache TTL acts as the snapshot's lifetime. Within that window,
-membership and order stay frozen, similar to a long-lived DB
-transaction holding the query's snapshot — though not the same
-guarantee. Attribute changes, deletions, and rows falling out of the
-original query conditions still show through; see
-[What Riffle Does NOT Freeze](#what-riffle-does-not-freeze).
+paging forward is seamless: every surviving row is shown exactly once,
+in the frozen order. Attribute changes and deletions still show
+through — see [Precise Semantics](#precise-semantics).
 
 ## Pagination Strategies Compared
 
-| Strategy | Phantom-free across pages | Deep pagination perf | Page-number jump |
+| Strategy | Skip/dup-free across pages | Deep pagination perf | Page-number jump |
 |---|:---:|:---:|:---:|
 | Plain Kaminari / Pagy (OFFSET) | ❌ | ❌ | ✅ |
 | Pagy::Countless | ❌ | ⚠️ (no COUNT, OFFSET still) | ✅ |
@@ -101,31 +99,42 @@ properties without requiring Elasticsearch or DB-specific tricks.
 3. The `cursor_id` is propagated in pagination links so every page
    navigation lands on the same snapshot until the TTL expires.
 
-## What Riffle Does NOT Freeze
+## Precise Semantics
 
 Riffle freezes the result set's **membership and order** at snapshot
-time — not the full row contents. This differs from DB Repeatable Read
-in three ways:
+time — not the full row contents.
+
+**Guaranteed within a snapshot's TTL:**
+
+- **No skips, no duplicates while paging forward** — even under
+  concurrent inserts, deletes, updates, and reordering. A row that
+  disappears is compensated on the very page where the gap is detected
+  (see [Handling Deleted Records](#handling-deleted-records)), which
+  keeps subsequent page boundaries continuous: every surviving row is
+  shown exactly once.
+- **Inserts and reordering are invisible.** New or re-sorted rows
+  elsewhere in the table never shift what any page shows.
+- **Membership only shrinks, never grows.**
+
+**Not guaranteed:**
 
 1. **Attribute updates are visible.** Every page re-fetches records by
    ID (`WHERE id IN (...)`), so column changes made after the snapshot
    was taken show up immediately.
-2. **Deletions mutate the snapshot.** When a record is deleted, Riffle
-   removes its ID from the cached list and backfills the page from the
-   next available ID (see
-   [Handling Deleted Records](#handling-deleted-records)). This shifts
-   page composition and `total_count`.
-3. **Records that fall out of the original WHERE clause are treated
-   as deleted.** Page fetches re-apply the base relation's conditions,
-   so a row that no longer matches — e.g. updated to a different
-   status — disappears from the snapshot exactly as if it had been
-   deleted.
-
-In short, Riffle prevents the phantom and duplicate rows that inserts
-and reordering cause across page navigation. It does not provide the
-full isolation of a database transaction — treat the Repeatable Read
-comparison as an analogy for that specific fix, not a literal
-guarantee.
+2. **Deletions shrink the snapshot.** A deleted row is dropped from the
+   cached list when the page containing it is displayed, and
+   `total_count` decreases accordingly (plain OFFSET pagination shifts
+   its counts under deletions too).
+3. **Rows that fall out of the original WHERE clause are treated as
+   deleted.** Page fetches re-apply the base relation's conditions, so
+   a row that no longer matches — e.g. updated to a different status —
+   is dropped like a deletion. This is deliberate: those conditions
+   often encode authorization, and re-applying them fails closed.
+4. **Revisiting an earlier page after such shrinkage may show a
+   different composition** than the first visit (rows the user already
+   saw shift up). Riffle optimizes for seamless forward navigation, not
+   byte-stable re-reads — which is also why this is *not* database
+   Repeatable Read, despite the family resemblance.
 
 ## Supported Versions
 
@@ -289,6 +298,17 @@ cursor param so navigating one never disturbs the other:
 @users = riffle_page(User.order(:name), per: 20, param: :users_cursor)
 @posts = riffle_page(Post.order(:title), per: 20, param: :posts_cursor)
 ```
+
+#### Deriving new queries from a riffled relation
+
+Treat `.riffle` as the end of the chain. Deriving a *differently
+conditioned* query from an already-loaded riffle relation
+(`@users.where(active: true)` after rendering) does not create a new
+snapshot: it re-reads the same snapshot with the extra condition
+applied, and rows that fail it are dropped from the shared snapshot as
+if deleted (see [Precise Semantics](#precise-semantics)). If you need
+the same search with different conditions, build a fresh chain ending
+in its own `.riffle`.
 
 #### Outside controllers (jobs, service objects)
 

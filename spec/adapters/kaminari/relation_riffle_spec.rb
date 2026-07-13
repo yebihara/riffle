@@ -136,6 +136,20 @@ RSpec.describe Riffle::Adapters::Kaminari::RelationRiffle do
 
       expect(second.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
     end
+
+    it "keeps riffle's snapshot total_count winning after page navigation" do
+      # The most fragile guarantee of this design: .page re-extends Kaminari's
+      # modules, and total_count must still resolve to riffle's. Diverge live
+      # (21) from snapshot (20) via an insert — inserts never touch the
+      # snapshot, so any live count leaking through fails loudly here.
+      first = User.order(:name).page(1).per(5).riffle(cursor: nil)
+      first.records
+      User.create!(name: "user-99")
+
+      second = first.page(2).per(5)
+      expect(second.method(:total_count).owner).to eq(described_class)
+      expect(second.total_count).to eq(20)
+    end
   end
 
   context "relations derived from a loaded riffle relation" do
