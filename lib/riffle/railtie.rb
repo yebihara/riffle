@@ -21,13 +21,6 @@ module Riffle
         end
       end
 
-      ActiveSupport.on_load(:active_record) do
-        if defined?(::Kaminari)
-          require "riffle/adapters/kaminari/relation_extension"
-          ActiveRecord::Relation.prepend Riffle::Adapters::Kaminari::RelationExtension
-        end
-      end
-
       ActiveSupport.on_load(:action_view) do
         if defined?(::Kaminari)
           require "riffle/adapters/kaminari/view_helpers"
@@ -42,20 +35,6 @@ module Riffle
           else
             Riffle::Adapters::Pagy.warn_unsupported
           end
-        end
-      end
-    end
-
-    config.to_prepare do
-      if defined?(::Kaminari) && defined?(ApplicationRecord)
-        require "riffle/adapters/kaminari/hooks"
-        Riffle::Adapters::Kaminari.wrap_page_method(ApplicationRecord)
-
-        ActiveRecord::Base.descendants.each do |model|
-          next if model.abstract_class?
-          next unless model.respond_to?(:page)
-
-          Riffle::Adapters::Kaminari.wrap_page_method(model)
         end
       end
     end

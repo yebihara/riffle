@@ -1,98 +1,85 @@
 # frozen_string_literal: true
 
-require "active_support/all"
+require_relative "../../support/active_record"
+require_relative "../../support/kaminari"
 require "riffle/adapters/kaminari/controller_methods"
 
 RSpec.describe Riffle::Adapters::Kaminari::ControllerMethods do
+  let(:store) { Riffle::Store::Memory.new(ttl: 300, max_ids: 1000) }
+
   let(:controller_class) do
     Class.new do
       include Riffle::Adapters::Kaminari::ControllerMethods
-
-      class << self
-        def before_actions
-          @before_actions ||= []
-        end
-
-        def before_action(**options, &block)
-          before_actions << { options: options, block: block }
-        end
-      end
-
       attr_accessor :params
+      def initialize(params = {})
+        @params = params
+      end
     end
   end
 
-  describe ".riffle" do
-    it "registers a before_action" do
-      controller_class.riffle only: [:index]
-      expect(controller_class.before_actions.size).to eq(1)
+  before do
+    Riffle.store = store
+    20.times { |i| User.create!(name: "user-#{i.to_s.rjust(2, '0')}") }
+  end
+
+  describe "#riffle_page" do
+    it "reads params[:page] and the default cursor param" do
+      controller = controller_class.new(page: "2")
+      relation = controller.riffle_page(User.order(:name), per: 5)
+
+      expect(relation.current_page).to eq(2)
+      expect(relation.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+      expect(relation.riffle_cursor_param).to eq(:cursor_id)
     end
 
-    it "passes :only and :except through to before_action" do
-      controller_class.riffle only: [:index, :show], except: [:create]
-      registered = controller_class.before_actions.first
-      expect(registered[:options]).to eq(only: [:index, :show], except: [:create])
+    it "resumes an existing snapshot from the cursor param" do
+      seed = controller_class.new(page: "1").riffle_page(User.order(:name), per: 5)
+      seed.records
+      cursor_id = seed.riffle_cursor_id
+
+      controller = controller_class.new(page: "2", cursor_id: cursor_id)
+      relation = controller.riffle_page(User.order(:name), per: 5)
+
+      expect(relation.riffle_cursor_id).to eq(cursor_id)
+      expect(relation.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+      expect(store.raw_data.size).to eq(1)
     end
 
-    it "drops other options" do
-      controller_class.riffle only: [:index], if: -> { true }
-      registered = controller_class.before_actions.first
-      expect(registered[:options].keys).to contain_exactly(:only)
+    it "honors a per-collection :param name" do
+      controller = controller_class.new(page: "1", users_cursor: nil)
+      relation = controller.riffle_page(User.order(:name), per: 5, param: :users_cursor)
+      relation.records
+
+      expect(relation.riffle_cursor_param).to eq(:users_cursor)
     end
 
-    describe "the registered before_action block" do
-      let(:block) do
-        controller_class.riffle only: [:index]
-        controller_class.before_actions.first[:block]
-      end
+    it "keeps two collections independent when navigated separately" do
+      Post.delete_all
+      20.times { |i| Post.create!(title: "post-#{i.to_s.rjust(2, '0')}") }
 
-      it "sets Riffle::Current.cursor_id from params" do
-        controller = controller_class.new
-        controller.params = { cursor_id: "abc123" }
-        controller.instance_exec(&block)
+      c1 = controller_class.new(page: "1")
+      users = c1.riffle_page(User.order(:name), per: 5, param: :users_cursor)
+      posts = c1.riffle_page(Post.order(:title), per: 5, param: :posts_cursor)
+      users.records
+      posts.records
+      users_cursor = users.riffle_cursor_id
+      posts_cursor = posts.riffle_cursor_id
+      users_ids_before = store.raw_data[users_cursor][:ids].dup
 
-        expect(Riffle::Current.cursor_id).to eq("abc123")
-      end
+      # Second request: advance only posts, echoing both cursors as a browser would.
+      c2 = controller_class.new(page: "2", users_cursor: users_cursor, posts_cursor: posts_cursor)
+      posts_p2 = c2.riffle_page(Post.order(:title), per: 5, param: :posts_cursor)
+      posts_p2.records
 
-      it "sets Riffle::Current.page from params" do
-        controller = controller_class.new
-        controller.params = { page: "3" }
-        controller.instance_exec(&block)
-
-        expect(Riffle::Current.page).to eq("3")
-      end
-
-      it "sets Riffle::Current.enabled to true by default" do
-        controller = controller_class.new
-        controller.params = {}
-        controller.instance_exec(&block)
-
-        expect(Riffle::Current.enabled).to be true
-      end
-
-      it "honors a custom Configuration.cursor_param" do
-        Riffle.config.cursor_param = :rfl
-        controller_class.riffle only: [:index]
-        custom_block = controller_class.before_actions.last[:block]
-
-        controller = controller_class.new
-        controller.params = { rfl: "xyz" }
-        controller.instance_exec(&custom_block)
-
-        expect(Riffle::Current.cursor_id).to eq("xyz")
-      ensure
-        Riffle.config.cursor_param = :cursor_id
-      end
+      expect(posts_p2.riffle_cursor_id).to eq(posts_cursor)
+      expect(store.raw_data[users_cursor][:ids]).to eq(users_ids_before)
+      expect(store.raw_data.size).to eq(2)
     end
 
-    it "can be called with riffle(false) to register a disabled action" do
-      controller_class.riffle false, only: [:index]
-      block = controller_class.before_actions.first[:block]
-      controller = controller_class.new
-      controller.params = {}
-      controller.instance_exec(&block)
-
-      expect(Riffle::Current.enabled).to be false
+    it "defaults page to 1 when params[:page] is absent" do
+      controller = controller_class.new({})
+      relation = controller.riffle_page(User.order(:name), per: 5)
+      expect(relation.current_page).to eq(1)
     end
   end
 end

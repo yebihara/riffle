@@ -3,7 +3,6 @@
 require "riffle/version"
 require "riffle/error"
 require "riffle/configuration"
-require "riffle/current"
 
 # Store
 require "riffle/store/base"
@@ -14,6 +13,10 @@ require "riffle/store/memory"
 require "riffle/core/cursor"
 require "riffle/core/snapshot"
 require "riffle/core/page_fetcher"
+
+# Model mixin for the Kaminari adapter (Riffle::Model). Safe to load without
+# Kaminari present; it only touches ::Kaminari at call time.
+require "riffle/model"
 
 # Railtie (loads adapters conditionally)
 require "riffle/railtie" if defined?(Rails)

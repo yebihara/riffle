@@ -240,26 +240,76 @@ end
 
 ### With Kaminari
 
-Use the `riffle` macro in your controller:
+Opt your models in once — a single `include Riffle::Model`, usually on
+`ApplicationRecord`:
+
+```ruby
+class ApplicationRecord < ActiveRecord::Base
+  self.abstract_class = true
+  include Riffle::Model
+end
+```
+
+Then add one word at the call site. Chain `.riffle` **after** `.page`/`.per`
+(it must be the last pagination call — see the note below):
 
 ```ruby
 class UsersController < ApplicationController
-  # Enable Riffle for specified actions
-  riffle only: [:index]
-
   def index
-    @users = User.order(:name).page(params[:page]).per(20)
+    @users = User.order(:name)
+                 .page(params[:page]).per(20)
+                 .riffle(cursor: params[:cursor_id])
   end
 end
 ```
 
-Views work as usual:
+Or use the `riffle_page` controller helper, which reads `params[:page]` and the
+cursor param for you (symmetric with `pagy_riffle`):
+
+```ruby
+class UsersController < ApplicationController
+  def index
+    @users = riffle_page(User.order(:name), per: 20)
+  end
+end
+```
+
+Views work as usual — the cursor is carried into pagination links automatically:
 
 ```erb
 <%= paginate @users %>
 ```
 
-The `cursor_id` parameter is automatically included in pagination links.
+#### Paginating two collections on one page
+
+Each `.riffle` produces an independent snapshot. Give each collection its own
+cursor param so navigating one never disturbs the other:
+
+```ruby
+@users = riffle_page(User.order(:name), per: 20, param: :users_cursor)
+@posts = riffle_page(Post.order(:title), per: 20, param: :posts_cursor)
+```
+
+#### Outside controllers (jobs, service objects)
+
+`.riffle` needs no request or `params`, so it works anywhere — pass the cursor
+explicitly:
+
+```ruby
+users = User.order(:name).page(page).per(20).riffle(cursor: cursor_id)
+next_cursor = users.riffle_cursor_id
+```
+
+#### Why `.riffle` goes last
+
+Kaminari mixes its own `total_count` into the relation when you call `.page`.
+Ruby resolves the most-recently-added module first, so `.riffle` has to come
+after `.page`/`.per` for its cursor-backed `total_count` to win. `riffle_page`
+handles the ordering for you. Applying `.riffle` **before** `.page` raises a
+`Riffle::ConfigurationError` (rather than silently reporting the live table
+count) as soon as the records load. Adding `.per` *after* `.riffle` is fine —
+only `.page` must precede it. (`merge` does not copy the per-relation state, so
+`other.merge(riffled_scope)` is unsupported.)
 
 ### With Pagy
 
@@ -332,6 +382,7 @@ Riffle works with existing Kaminari/Pagy serialization. Simply include the `curs
 # Controller
 def index
   @users = User.order(:name).page(params[:page]).per(20)
+               .riffle(cursor: params[:cursor_id])
 
   render json: {
     users: @users.as_json,

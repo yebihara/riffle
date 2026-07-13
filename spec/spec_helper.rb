@@ -2,7 +2,6 @@
 
 require "bundler/setup"
 require "active_support"
-require "active_support/current_attributes"
 require "riffle"
 
 # Use memory store for testing
@@ -18,6 +17,5 @@ RSpec.configure do |config|
 
   config.before(:each) do
     Riffle.store.clear if Riffle.store.respond_to?(:clear)
-    Riffle::Current.reset
   end
 end

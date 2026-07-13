@@ -4,12 +4,13 @@ module Riffle
   module Adapters
     module Kaminari
       module ViewHelpers
-        # Override kaminari's paginate helper to automatically include cursor_id
+        # Override kaminari's paginate helper to automatically carry the
+        # relation's cursor into every page link, under that relation's own
+        # cursor param (so two paginators on one page use different params).
         def paginate(scope, paginator_class: ::Kaminari::Helpers::Paginator, template: nil, **options)
           if scope.respond_to?(:riffle_cursor_id) && scope.riffle_cursor_id.present?
-            cursor_param = Riffle.config.cursor_param
             options[:params] ||= {}
-            options[:params][cursor_param] = scope.riffle_cursor_id
+            options[:params][riffle_cursor_param(scope)] = scope.riffle_cursor_id
           end
 
           super(scope, paginator_class: paginator_class, template: template, **options)
@@ -20,22 +21,28 @@ module Riffle
           scope.respond_to?(:riffle_cursor_id) ? scope.riffle_cursor_id : nil
         end
 
+        # The cursor param name for a paginated scope (per-relation when the
+        # scope carries one, else the global default).
+        def riffle_cursor_param(scope)
+          if scope.respond_to?(:riffle_cursor_param)
+            scope.riffle_cursor_param
+          else
+            Riffle.config.cursor_param
+          end
+        end
+
         # Hidden field for forms that need to preserve cursor_id
         def riffle_cursor_field(scope)
           cursor_id = riffle_cursor_id(scope)
           return unless cursor_id
 
-          cursor_param = Riffle.config.cursor_param
-          hidden_field_tag(cursor_param, cursor_id)
+          hidden_field_tag(riffle_cursor_param(scope), cursor_id)
         end
 
         # URL helper that includes cursor_id
         def riffle_path(base_path, scope, **params)
           cursor_id = riffle_cursor_id(scope)
-          if cursor_id
-            cursor_param = Riffle.config.cursor_param
-            params[cursor_param] = cursor_id
-          end
+          params[riffle_cursor_param(scope)] = cursor_id if cursor_id
 
           if base_path.is_a?(String)
             uri = URI.parse(base_path)

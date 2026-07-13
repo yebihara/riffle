@@ -2,9 +2,10 @@
 
 require "kaminari"
 require "kaminari/activerecord"
-require "riffle/adapters/kaminari/relation_extension"
-require "riffle/adapters/kaminari/hooks"
+require "riffle/model"
 
-ActiveRecord::Relation.prepend(Riffle::Adapters::Kaminari::RelationExtension)
-Riffle::Adapters::Kaminari.wrap_page_method(User)
-Riffle::Adapters::Kaminari.wrap_page_method(UuidRecord)
+# Opt the test models into the Kaminari adapter the same way an app would:
+# a single `include Riffle::Model`, no global ActiveRecord::Relation patches.
+User.include(Riffle::Model)
+UuidRecord.include(Riffle::Model)
+Post.include(Riffle::Model)

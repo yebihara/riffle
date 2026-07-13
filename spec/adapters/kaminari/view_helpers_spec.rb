@@ -26,17 +26,18 @@ RSpec.describe Riffle::Adapters::Kaminari::ViewHelpers do
 
   let(:helper) { host_class.new }
 
-  let(:scope_with_cursor) do
+  # Build a fake paginated scope carrying a per-relation cursor id + param,
+  # mirroring what RelationRiffle exposes.
+  def scope_with(cursor_id:, param: :cursor_id)
     obj = Object.new
-    obj.define_singleton_method(:riffle_cursor_id) { "abc123" }
+    obj.define_singleton_method(:riffle_cursor_id) { cursor_id }
+    obj.define_singleton_method(:riffle_cursor_param) { param }
     obj
   end
 
-  let(:scope_without_cursor) do
-    obj = Object.new
-    obj.define_singleton_method(:riffle_cursor_id) { nil }
-    obj
-  end
+  let(:scope_with_cursor) { scope_with(cursor_id: "abc123") }
+
+  let(:scope_without_cursor) { scope_with(cursor_id: nil) }
 
   let(:bare_scope) { Object.new }  # does not respond to :riffle_cursor_id
 
@@ -61,12 +62,21 @@ RSpec.describe Riffle::Adapters::Kaminari::ViewHelpers do
       expect(result[:options][:params]).to be_nil
     end
 
-    it "honors a custom Configuration.cursor_param" do
-      Riffle.config.cursor_param = :rfl
-      result = helper.paginate(scope_with_cursor)
-      expect(result[:options][:params][:rfl]).to eq("abc123")
-    ensure
-      Riffle.config.cursor_param = :cursor_id
+    it "injects under the scope's per-relation cursor param" do
+      scope = scope_with(cursor_id: "abc123", param: :users_cursor)
+      result = helper.paginate(scope)
+      expect(result[:options][:params][:users_cursor]).to eq("abc123")
+    end
+
+    it "carries different params for two paginators on one page" do
+      users = scope_with(cursor_id: "u-1", param: :users_cursor)
+      posts = scope_with(cursor_id: "p-1", param: :posts_cursor)
+
+      users_result = helper.paginate(users)
+      posts_result = helper.paginate(posts)
+
+      expect(users_result[:options][:params]).to eq(users_cursor: "u-1")
+      expect(posts_result[:options][:params]).to eq(posts_cursor: "p-1")
     end
   end
 

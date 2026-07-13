@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed (breaking)
+- **Kaminari adapter redesigned around `ActiveRecord::Relation#extending`; the old global patches are gone** ([#7](https://github.com/yebihara/riffle/issues/7)). Removed the `riffle only:` controller macro, the request-global `Riffle::Current`, the every-model `.page` aliasing (`hooks.rb`), and the every-relation `RelationExtension` prepend. Riffle is now opt-in per model and per call site:
+  - `include Riffle::Model` on a model (usually `ApplicationRecord`) adds a `.riffle(cursor:, param:, store:)` scope. Chain it **after** `.page`/`.per` — it must come after `.page` so its cursor-backed `total_count` wins over Kaminari's (Kaminari mixes `total_count` in at `.page` time, and Ruby resolves the later-added module first). Applying `.riffle` before `.page` raises `Riffle::ConfigurationError` when records load, instead of silently reporting the live table count; `.per` after `.riffle` is fine.
+  - `riffle_page(relation, per:, page:, param:, store:)` controller helper replaces the macro, reading the page and cursor params from the request (symmetric with `pagy_riffle`).
+  - Each `.riffle` produces an independent snapshot with its own `param:` (default `Riffle.config.cursor_param`), **fixing the request-global cursor corruption** that let two paginated collections in one action clobber each other's snapshots. View helpers (`paginate`, `riffle_cursor_field`, `riffle_path`) now read the relation's own `riffle_cursor_param`.
+  - Works outside controllers (jobs, service objects) — no `params`/request required; pass `cursor:` directly. `other.merge(riffled_scope)` is unsupported (instance variables do not transfer through `merge`).
+
 ### Added
 - GitHub Actions CI: runs the suite on Pagy 8, 9, and 43 with a real Redis service container ([#2](https://github.com/yebihara/riffle/issues/2)). The Redis store spec now honors `REDIS_URL` to run against a real server instead of mock_redis.
 - Pagy 9 support: the adapter now detects the installed Pagy major and uses `:limit` (Pagy 9) or `:items` (Pagy 8) for the page-size var, request param, and `Pagy.new` keyword ([#1](https://github.com/yebihara/riffle/issues/1)).

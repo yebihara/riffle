@@ -1,51 +1,16 @@
 # frozen_string_literal: true
 
+require "riffle/adapters/fetch_support"
+
 module Riffle
   module Adapters
     module Pagy
       # Cursor-fetching helpers shared by the version-specific Pagy backends
-      # (legacy 8/9 and 43). These are the only pieces of pagy_riffle that do
-      # not depend on the Pagy API surface, so they live in one place.
+      # (legacy 8/9 and 43). The implementation now lives in the adapter-agnostic
+      # Riffle::Adapters::FetchSupport (also used by the Kaminari adapter); this
+      # module is kept as a stable require path / mixin name for the Pagy side.
       module BackendSupport
-        private
-
-        def fetch_from_cursor(cursor, base_scope, page, items, store)
-          snapshot = Riffle::Core::Snapshot.new(cursor, store: store)
-          fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope, store: store)
-          result = fetcher.fetch(page: page, per_page: items)
-
-          {
-            records: result.records,
-            total_count: result.total_count,
-            cursor_id: result.cursor_id
-          }
-        end
-
-        def fetch_with_new_cursor(base_scope, page, items, store)
-          all_ids = base_scope.pluck(base_scope.klass.primary_key)
-          cursor = Riffle::Core::Cursor.create(all_ids, total_count: all_ids.size, store: store)
-
-          # Snapshot#cursor_id is @cursor.id, so the freshly created cursor's
-          # id flows through the Result — no need to duplicate the fetch here.
-          fetch_from_cursor(cursor, base_scope, page, items, store)
-        end
-
-        # Resolve the incoming cursor into a fetch result, applying the
-        # configured :auto / :strict behavior for expired/unknown cursors.
-        def riffle_fetch_result(cursor_id, base_scope, page, items, store)
-          cursor = Riffle::Core::Cursor.find(cursor_id, store: store) if cursor_id.present?
-
-          if cursor
-            fetch_from_cursor(cursor, base_scope, page, items, store)
-          elsif cursor_id.present? && Riffle.config.on_cursor_expired == :strict
-            # The caller passed a cursor_id but it no longer exists.
-            # Strict mode surfaces this so the app can redirect to a fresh
-            # search instead of silently creating a different snapshot.
-            raise Riffle::CursorExpired, "Cursor '#{cursor_id}' has expired"
-          else
-            fetch_with_new_cursor(base_scope, page, items, store)
-          end
-        end
+        include Riffle::Adapters::FetchSupport
       end
     end
   end

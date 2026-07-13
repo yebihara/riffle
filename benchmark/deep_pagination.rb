@@ -20,8 +20,6 @@ require "kaminari"
 require "kaminari/activerecord"
 require "logger"
 require_relative "../lib/riffle"
-require "riffle/adapters/kaminari/relation_extension"
-require "riffle/adapters/kaminari/hooks"
 
 NUM_RECORDS  = (ARGV[0] || 100_000).to_i
 ITERATIONS   = 5
@@ -41,6 +39,7 @@ ActiveRecord::Schema.define do
 end
 
 class Widget < ActiveRecord::Base
+  include Riffle::Model
 end
 
 # Use the bundled Memory store so this benchmark runs without a Redis daemon.
@@ -48,9 +47,6 @@ end
 # same as the Redis store; absolute numbers will differ from production but
 # the page=1 vs page=N relationship is what matters here.
 Riffle.store = Riffle::Store::Memory.new(ttl: 600, max_ids: 1_000_000)
-
-ActiveRecord::Relation.prepend(Riffle::Adapters::Kaminari::RelationExtension)
-Riffle::Adapters::Kaminari.wrap_page_method(Widget)
 
 puts "Seeding #{NUM_RECORDS} widgets..."
 Widget.transaction do
@@ -82,21 +78,15 @@ puts "Riffle (snapshot reuse with cursor_id)"
 puts "-" * 60
 
 # First request: materializes the cursor.
-Riffle::Current.enabled = true
-Riffle::Current.cursor_id = nil
-seed = Widget.order(:name).page(1).per(PER_PAGE)
+seed = Widget.order(:name).page(1).per(PER_PAGE).riffle(cursor: nil)
 seed.records # force load
 cursor_id = seed.riffle_cursor_id
 
 riffle_p1 = time_iterations("page 1, per_page #{PER_PAGE} (cursor reuse)", iterations: ITERATIONS) do
-  Riffle::Current.cursor_id = cursor_id
-  Riffle::Current.page = 1
-  Widget.order(:name).page(1).per(PER_PAGE).records.to_a
+  Widget.order(:name).page(1).per(PER_PAGE).riffle(cursor: cursor_id).records.to_a
 end
 riffle_pn = time_iterations("page #{DEEP_PAGE}, per_page #{PER_PAGE} (cursor reuse)", iterations: ITERATIONS) do
-  Riffle::Current.cursor_id = cursor_id
-  Riffle::Current.page = DEEP_PAGE
-  Widget.order(:name).page(DEEP_PAGE).per(PER_PAGE).records.to_a
+  Widget.order(:name).page(DEEP_PAGE).per(PER_PAGE).riffle(cursor: cursor_id).records.to_a
 end
 puts
 
