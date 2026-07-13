@@ -7,6 +7,9 @@ require "riffle/adapters/pagy/compat"
 # defines Riffle::Adapters::Pagy::Backend. Pagy 43 rewrote the pagination API,
 # so it needs a separate implementation from the 8/9 (Pagy::Backend) era.
 if defined?(::Pagy)
+  # Direct requires bypass the railtie/extra supported? guard — warn (once)
+  # on unsupported majors, then best-effort load the nearest implementation.
+  Riffle::Adapters::Pagy.warn_unsupported unless Riffle::Adapters::Pagy.supported?
   if Riffle::Adapters::Pagy.v43?
     require "riffle/adapters/pagy/backend_v43"
   else
@@ -28,6 +31,7 @@ else
                     "pagy_riffle needs the pagy gem: require \"pagy\" before calling it"
             end
 
+            Riffle::Adapters::Pagy.warn_unsupported unless Riffle::Adapters::Pagy.supported?
             impl = Riffle::Adapters::Pagy.v43? ? "backend_v43" : "backend_legacy"
             require "riffle/adapters/pagy/#{impl}"
 

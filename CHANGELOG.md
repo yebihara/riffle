@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Pagy 43 adapter: `?page=0` / negative / non-numeric page params render page 1 again (clamped like `Pagy::Request#resolve_page`) instead of raising `Pagy::OptionError`; page/limit params nested under `:root_key` (JSON:API style) are resolved again; an explicitly passed `request:` option is no longer shadowed by the surrounding controller's `#params`; the params-fallback now delegates to `Pagy::Request#resolve_page` / `#resolve_limit` instead of re-implementing their resolution rules.
+- Pagy 43 adapter: the limit injected into page links is nested under `:root_key` when one is set (canonical JSON:API form, matching where native Pagy writes page/limit params); direct requires of the adapter files now warn on unsupported Pagy majors like the railtie/extra path does.
 - Requiring `riffle/adapters/pagy/backend` before the pagy gem no longer silently binds the 8/9 implementation: the dispatcher defers the version check to the first `pagy_riffle` call (and raises a clear `Riffle::ConfigurationError` if pagy is still absent). The frontend falls back to the legacy module, which is a safe superset on Pagy 43.
 - **UUID / custom string primary keys are no longer corrupted** on the Redis store path (issue #001).
 - **Original relation scope** (`includes`, `select`, `joins`, additional `where`) is preserved across page navigation; previous behavior issued the per-page WHERE against the bare model class, dropping all scope and causing N+1 (issue #002).

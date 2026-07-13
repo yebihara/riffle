@@ -55,18 +55,28 @@ module Riffle
           new_cursor_id = result[:cursor_id]
 
           # compose_page_url drops limit_key unless :max_limit is set and clones
-          # the incoming request params, so re-inject cursor_id (always) and the
-          # limit (only when it came from the request — an explicit :limit option
-          # is re-applied by the caller every request, matching 8/9).
-          injected = { cursor_param.to_s => new_cursor_id }
-          injected[limit_key] = items if limit_from_param
-
+          # the incoming request params, so re-inject cursor_id (always,
+          # top-level — it is riffle's own param, never nested) and the limit
+          # (only when it came from the request — an explicit :limit option is
+          # re-applied by the caller every request, matching 8/9). The limit
+          # goes under :root_key when one is set, matching where native Pagy
+          # writes the page/limit params. Any user-supplied :querify runs first.
+          root_key = merged[:root_key]
           user_querify = merged[:querify]
+          injected_limit = limit_from_param ? items : nil
+
           merged[:count]   = result[:total_count]
           merged[:page]    = page
           merged[:limit]   = items
           merged[:request] = req
-          merged[:querify] = pagy_riffle_querify(user_querify, injected)
+          merged[:querify] = lambda do |url_params|
+            user_querify&.call(url_params)
+            url_params[cursor_param.to_s] = new_cursor_id
+            if injected_limit
+              container = root_key ? (url_params[root_key] ||= {}) : url_params
+              container[limit_key] = injected_limit
+            end
+          end
 
           pagy = ::Pagy::Offset.new(**merged)
 
@@ -179,16 +189,6 @@ module Riffle
           end
 
           [req.resolve_limit.to_i, false]
-        end
-
-        # Build the :querify lambda that injects the current cursor_id (and,
-        # when relevant, the limit) into every page URL. Any user-supplied
-        # :querify is preserved and runs first.
-        def pagy_riffle_querify(user_querify, injected)
-          lambda do |params|
-            user_querify&.call(params)
-            injected.each { |k, v| params[k] = v }
-          end
         end
       end
     end

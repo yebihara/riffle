@@ -326,6 +326,15 @@ RSpec.describe Riffle::Adapters::Pagy::Backend do
       expect(records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
     end
 
+    it "keeps the injected limit nested under :root_key in page links" do
+      ctrl = controller_class.new(page: { page: "2", limit: "5" })
+      pagy, = ctrl.pagy_riffle(User.order(:name), root_key: "page")
+
+      url = pagy.page_url(3)
+      expect(url).to include("page%5Blimit%5D=5") # page[limit]=5, URL-escaped
+      expect(url).not_to match(/[?&]limit=/)      # no stray top-level limit
+    end
+
     it "prefers an explicitly passed :request over the controller params" do
       ctrl = controller_class.new(page: "1")  # controller request says page 1
       custom = { base_url: "http://example.com", path: "/users",
