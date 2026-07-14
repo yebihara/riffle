@@ -178,10 +178,10 @@ automatically via the `:querify` option.
 
 ## Installation
 
-Add to your Gemfile:
+Not yet on rubygems.org — install from the Git tag:
 
 ```ruby
-gem 'riffle'
+gem 'riffle', github: 'yebihara/riffle', tag: 'v0.2.0'
 ```
 
 Then run:
