@@ -80,6 +80,15 @@ through — see [Precise Semantics](#precise-semantics).
 Riffle is the only Ruby/Rails-native option that delivers all three
 properties without requiring Elasticsearch or DB-specific tricks.
 
+Keyset pagination also constrains your `ORDER BY`: it must be a total
+order (a unique column combination — in practice a trailing `id`
+tiebreaker), or rows are silently skipped or duplicated at page
+boundaries. Riffle has no such requirement. It freezes the ID list the
+first query happens to return, so any `ORDER BY` — ties, complex
+expressions, `NULLS FIRST` — becomes deterministic once snapshotted.
+(Plain OFFSET pagination actually has the tie problem too: SQL gives
+tied rows no guaranteed order, so they can swap between requests.)
+
 ## How It Works
 
 ```
