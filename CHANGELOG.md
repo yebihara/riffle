@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-07-14
 ### Changed (breaking)
 - **Kaminari adapter redesigned around `ActiveRecord::Relation#extending`; the old global patches are gone** ([#7](https://github.com/yebihara/riffle/issues/7)). Removed the `riffle only:` controller macro, the request-global `Riffle::Current`, the every-model `.page` aliasing (`hooks.rb`), and the every-relation `RelationExtension` prepend. Riffle is now opt-in per model and per call site:
   - `include Riffle::Model` on a model (usually `ApplicationRecord`) adds a `.riffle(cursor:, param:, store:)` scope. Chain it **after** `.page`/`.per` — it must come after `.page` so its cursor-backed `total_count` wins over Kaminari's (Kaminari mixes `total_count` in at `.page` time, and Ruby resolves the later-added module first). Applying `.riffle` before `.page` raises `Riffle::ConfigurationError` at the `.page` call itself; `.per` / `.page` after `.riffle` are fine, and relations derived from a loaded riffle relation re-query against the same snapshot instead of returning the parent's memoized page.
@@ -61,5 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In-memory store for testing.
 - Backfill mechanism for records deleted between snapshot creation and page fetch.
 
-[Unreleased]: https://github.com/yebihara/riffle/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/yebihara/riffle/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/yebihara/riffle/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yebihara/riffle/releases/tag/v0.1.0

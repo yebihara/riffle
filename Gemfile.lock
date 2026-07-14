@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    riffle (0.1.0)
+    riffle (0.2.0)
       activesupport (>= 7.0)
       railties (>= 7.0)
       redis (>= 4.0)
