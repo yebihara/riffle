@@ -95,7 +95,7 @@ tied rows no guaranteed order, so they can swap between requests.)
 ┌─────────────────────────────────────┐
 │  kaminari adapter / pagy adapter    │  ← Adapter layer
 ├─────────────────────────────────────┤
-│            riffle (core)            │  ← Core API layer
+│            riffle (core)            │  ← Core layer (internal)
 ├─────────────────────────────────────┤
 │         Redis Sorted Set            │  ← Storage layer
 └─────────────────────────────────────┘
@@ -167,7 +167,7 @@ the same across all supported Pagy majors. Pagy 43 itself requires Ruby
 
 When an unsupported Pagy version is detected, Riffle logs a warning and
 skips the Pagy adapter instead of breaking your app (the Kaminari
-adapter and Core API are unaffected).
+adapter and standalone mode are unaffected).
 
 Note that Pagy renamed the page-size variable from `:items` (Pagy 8) to
 `:limit` (Pagy 9, kept in 43). `pagy_riffle` follows the convention of
@@ -353,7 +353,12 @@ only `.page` must precede it. (`merge` does not copy the per-relation state, so
 
 ### With Pagy
 
-Use the `pagy_riffle` method in your controller:
+Use the `pagy_riffle` method in your controller. `pagy_riffle` is a
+controller API — it consumes the relation as input and returns the
+metadata in a separate `Pagy` object — so the model-side
+`include Riffle::Model` is **not** needed here (that opt-in is only for
+the relation API, `.riffle`: the Kaminari integration and standalone
+use):
 
 ```ruby
 class UsersController < ApplicationController
@@ -373,7 +378,9 @@ Views work as usual:
 
 ### Standalone (no pagination gem)
 
-Riffle paginates on its own — no Kaminari or Pagy required. State the
+Riffle paginates on its own — no Kaminari or Pagy required. `.riffle`
+is the relation API, so it needs the same one-time
+`include Riffle::Model` opt-in as the Kaminari usage above. State the
 page and size directly on `.riffle` via the `page:`/`per:` keywords:
 
 ```ruby
@@ -389,7 +396,7 @@ users.riffle_cursor_id # => echo back as ?cursor_id=
 strings. When Kaminari happens to be in the chain too, the keywords win
 over `.page`/`.per`, so the same code works with or without it. For
 JSON responses, `riffle_meta` bundles the full pager metadata — see
-[API/JSON Responses](#apijson-responses).
+[JSON Responses](#json-responses).
 
 ### View Helpers
 
@@ -434,7 +441,7 @@ This ensures the page size is maintained even when deletions occur.
 [Riffle::Memory] FETCH cursor_id=xxx offset=30 limit=2 fetched=2
 ```
 
-## API/JSON Responses
+## JSON Responses
 
 For JSON APIs no pagination gem is needed: pass `page:`/`per:` to
 `.riffle` and read the response metadata from `riffle_meta`:
@@ -543,30 +550,59 @@ Recommended operational setup:
   share a Redis instance with Sidekiq or other workloads, so that
   eviction policies cannot evict cursors mid-pagination
 
-### Core API
+#### Redis sizing
 
-You can use the Core API directly:
+Riffle is designed to keep its footprint small and bounded:
 
-```ruby
-# Create cursor (use the model's primary_key, not :id, to support UUIDs)
-base_scope = User.includes(:profile).order(:name)
-ids = base_scope.pluck(User.primary_key)
-cursor = Riffle::Core::Cursor.create(ids, total_count: ids.size)
+- Only primary keys are cached, never rows — memory is independent of
+  row width.
+- `max_ids` (default 100,000) caps every snapshot's size;
+  `on_max_ids_exceeded` picks truncate-vs-raise at the cap.
+- TTL caps every snapshot's lifetime, and expiry is Redis-native — no
+  cleanup job. Riffle never extends a TTL on its own, so a snapshot's
+  cost has a deadline fixed at creation.
+- A snapshot is created only by a cursor-less request (a fresh
+  search). Page navigation reuses the existing snapshot and adds no
+  memory; backfill only shrinks it.
 
-# Find cursor
-cursor = Riffle::Core::Cursor.find(cursor_id)
+Steady-state memory is therefore:
 
-# Fetch page from snapshot. Pass the relation (preferred) so includes /
-# joins / select are preserved when fetching the actual records.
-snapshot = Riffle::Core::Snapshot.new(cursor)
-fetcher = Riffle::Core::PageFetcher.new(snapshot: snapshot, relation: base_scope)
-result = fetcher.fetch(page: 2, per_page: 20)
-
-result.records      # => [User, User, ...]
-result.total_count  # => 1000
-result.cursor_id    # => "abc123xyz"
-result.total_pages  # => 50
 ```
+fresh searches/sec × TTL (sec) × avg result-set IDs × bytes per ID
+```
+
+Rules of thumb per sorted-set entry: ~100 bytes for integer PKs, ~150
+bytes for UUIDs. So a 10,000-ID snapshot is ≈ 1 MB and a capped
+100,000-ID snapshot ≈ 10 MB. Example: 0.5 fresh searches/sec with a
+30-minute TTL keeps ~900 snapshots alive; at 5,000 IDs each that is
+≈ 450 MB.
+
+Caveats that remain despite the bounds:
+
+- **Memory scales with searches, not with page navigation.** Every
+  fresh search materializes a snapshot — including the majority of
+  visitors who never open page 2, and crawlers hitting search URLs
+  with distinct query strings. If a riffled endpoint is bot-exposed,
+  filter or rate-limit bots and prefer a shorter TTL.
+- `max_ids` is the worst-case knob. Nobody pages through 100,000 rows
+  (5,000 pages of 20); lowering it to e.g. 10,000 caps any single
+  snapshot at ≈ 1 MB with no practical UX loss.
+- TTL is the linear lever on how many snapshots are alive at once.
+- Monitor the truncation WARN logs, the `riffle:*` key count, and
+  `INFO memory`. The isolation advice above cuts both ways: under
+  memory pressure riffle's snapshots can also be what evicts a
+  co-tenant's keys.
+
+### Public API surface
+
+The supported API is `.riffle` / `riffle_meta` / `riffle_page` /
+`pagy_riffle` and the view helpers. Everything under `Riffle::Core`
+(`Cursor`, `Snapshot`, `PageFetcher`) and `Riffle::Store` internals is
+implementation detail and may change without notice — build on the
+documented surface above. If you have a use case the public API cannot
+express (e.g. snapshotting an ID list that comes from outside
+ActiveRecord, such as a search-engine result), please open an issue
+rather than reaching into the internals.
 
 ## Security
 
@@ -624,4 +660,4 @@ $ bin/console      # Interactive console
 
 ## License
 
-MIT License
+[MIT License](LICENSE.txt)

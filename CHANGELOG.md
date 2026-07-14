@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test infrastructure: spec/support/active_record.rb, spec/support/kaminari.rb, mock_redis-backed Redis store specs, full Pagy and Kaminari adapter specs.
 
 ### Changed
+- Withdrew the README's "use the Core API directly" documentation. `Riffle::Core` (`Cursor` / `Snapshot` / `PageFetcher`) and `Riffle::Store` internals are now explicitly positioned as implementation detail that may change without notice; the supported surface is `.riffle` / `riffle_meta` / `riffle_page` / `pagy_riffle` and the view helpers. The headless use case the Core API section used to serve is covered by the standalone mode ([#8](https://github.com/yebihara/riffle/issues/8)).
 - **Renamed gem from `chikuden` to `riffle`** (module / namespace / file paths / Redis key prefix / log prefix all updated).
 - Redis keys now use a `{cursor_id}` hash tag (`riffle:{CURSOR_ID}:ids` and `riffle:{CURSOR_ID}:meta`) so MULTI blocks succeed on Redis Cluster.
 - `Store::Redis#fetch_page` no longer coerces results with `.to_i`. UUID / string-typed primary keys are returned as-is so ActiveRecord can cast them at WHERE-clause time.
@@ -39,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README and gemspec reframed around the concrete guarantee — no skipped or duplicated rows while paging — instead of the "application-level Repeatable Read" analogy. A new "Precise Semantics" section documents what is and is not frozen, including revisit-after-shrinkage behavior and the derived-relation caveat.
 
 ### Fixed
+- Added the missing `LICENSE.txt`. The gemspec and README declared MIT, but no license text or copyright notice was shipped — the MIT grant was never actually made.
 - **UUID / custom string primary keys are no longer corrupted** on the Redis store path (issue #001).
 - **Original relation scope** (`includes`, `select`, `joins`, additional `where`) is preserved across page navigation; previous behavior issued the per-page WHERE against the bare model class, dropping all scope and causing N+1 (issue #002).
 - Redis Cluster compatibility: MULTI blocks no longer trip CROSSSLOT (issue #003).
