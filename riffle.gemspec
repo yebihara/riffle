@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.email         = ["yuichiro.ebihara@gmail.com"]
 
   spec.summary       = "Skip-free, duplicate-free pagination for Rails, backed by Redis snapshots"
-  spec.description   = "Riffle caches a search result's ID list in Redis and freezes its membership and order, so users never see rows skipped or duplicated while paging — even under concurrent inserts, deletes, and reordering. As a side effect, it also solves the deep OFFSET pagination performance problem. Works with Kaminari and Pagy."
+  spec.description   = "Riffle caches a search result's ID list in Redis and freezes its membership and order, so users never see rows skipped or duplicated while paging — even under concurrent inserts, deletes, and reordering. As a side effect, it also solves the deep OFFSET pagination performance problem. Works with Kaminari and Pagy, or standalone with no pagination gem at all (JSON APIs)."
   spec.homepage      = "https://github.com/yebihara/riffle"
   spec.license       = "MIT"
 

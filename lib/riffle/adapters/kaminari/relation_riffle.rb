@@ -30,8 +30,10 @@ module Riffle
 
         # Stores per-relation cursor state. Called by Riffle::Model#riffle right
         # after +extending+. Returns self so it chains.
-        def riffle_setup(cursor_id: nil, param: nil, store: nil)
+        def riffle_setup(cursor_id: nil, page: nil, per: nil, param: nil, store: nil)
           @riffle_cursor_id = cursor_id
+          @riffle_page = page
+          @riffle_per = per
           @riffle_cursor_param = (param || Riffle.config.cursor_param).to_sym
           @riffle_store = store
           self
@@ -42,6 +44,24 @@ module Riffle
         def riffle_cursor_id
           riffle_load
           @riffle_cursor_id
+        end
+
+        # Response metadata for JSON APIs — everything a client needs to render
+        # a pager and request the next page. Reading it forces the fetch.
+        #
+        #   render json: { users: users.records, meta: users.riffle_meta }
+        def riffle_meta
+          riffle_load
+          total_pages = (@riffle_total_count.to_f / @riffle_loaded_per).ceil
+          {
+            cursor_id: @riffle_cursor_id,
+            page: @riffle_loaded_page,
+            per_page: @riffle_loaded_per,
+            total_count: @riffle_total_count,
+            total_pages: total_pages,
+            next_page: @riffle_loaded_page < total_pages ? @riffle_loaded_page + 1 : nil,
+            prev_page: @riffle_loaded_page > 1 ? @riffle_loaded_page - 1 : nil
+          }
         end
 
         # The request param name this collection reads/writes its cursor under.
@@ -104,6 +124,8 @@ module Riffle
           @riffle_loaded = false
           @riffle_records = nil
           @riffle_total_count = nil
+          @riffle_loaded_page = nil
+          @riffle_loaded_per = nil
         end
 
         def riffle_bypass?
@@ -115,8 +137,21 @@ module Riffle
 
           riffle_assert_chain_order!
 
-          page_num = respond_to?(:current_page) ? (current_page || 1) : 1
-          per_page = limit_value || riffle_default_per_page
+          # The page:/per: keywords exist so headless callers (JSON APIs, jobs)
+          # can paginate without Kaminari in the chain; when both a keyword and
+          # a chained Kaminari value are present, the keyword wins.
+          page_num = if @riffle_page
+                       [@riffle_page.to_i, 1].max
+                     elsif respond_to?(:current_page)
+                       current_page || 1
+                     else
+                       1
+                     end
+          per_page = if @riffle_per
+                       @riffle_per.to_i
+                     else
+                       limit_value || riffle_default_per_page
+                     end
           store = @riffle_store || Riffle.store
 
           # Drop pagination clauses and disarm riffle on the scope handed to the
@@ -129,6 +164,10 @@ module Riffle
           @riffle_records     = result[:records]
           @riffle_total_count = result[:total_count]
           @riffle_cursor_id   = result[:cursor_id]
+          # The page/per this load actually used, resolved from keyword /
+          # Kaminari / default — riffle_meta reports these, not the raw inputs.
+          @riffle_loaded_page = page_num
+          @riffle_loaded_per  = per_page
           @riffle_loaded      = true
         end
 
@@ -139,9 +178,9 @@ module Riffle
           return ::Kaminari.config.default_per_page if defined?(::Kaminari)
 
           raise Riffle::ConfigurationError,
-                "Riffle: no page size given — chain .limit(n) (or Kaminari's " \
-                ".per(n)) before .riffle, or install Kaminari to use its " \
-                "default_per_page"
+                "Riffle: no page size given — pass per: to .riffle, chain " \
+                ".limit(n) (or Kaminari's .per(n)) before it, or install " \
+                "Kaminari to use its default_per_page"
         end
 
         # Guard the chain-order requirement. When .riffle is applied BEFORE

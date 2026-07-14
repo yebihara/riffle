@@ -32,6 +32,17 @@ RSpec.describe "Riffle::Model without Kaminari" do
 
       records = User.order(:name).limit(2).riffle(cursor: nil).records
       abort "wrong records: #{records.map(&:name)}" unless records.map(&:name) == %w[u0 u1]
+
+      # The headless page:/per: keywords and riffle_meta must work with no
+      # pagination gem at all — that is their reason to exist.
+      first = User.order(:name).riffle(cursor: nil, page: 1, per: 2)
+      meta = first.riffle_meta
+      expected = { page: 1, per_page: 2, total_count: 3, total_pages: 2, next_page: 2, prev_page: nil }
+      abort "wrong meta: #{meta}" unless meta == expected.merge(cursor_id: first.riffle_cursor_id)
+
+      second = User.order(:name).riffle(cursor: first.riffle_cursor_id, page: 2, per: 2)
+      abort "wrong page 2: #{second.records.map(&:name)}" unless second.records.map(&:name) == %w[u2]
+      abort "cursor not reused" unless second.riffle_cursor_id == first.riffle_cursor_id
       puts "OK"
     RUBY
 

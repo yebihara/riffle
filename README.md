@@ -17,8 +17,9 @@ performance problem: page navigation is `O(log N + page_size)`
 regardless of page number, since the database is never asked to skip
 rows.
 
-Works with Kaminari and Pagy. An in-memory store is bundled for
-testing without Redis.
+Works with Kaminari and Pagy — or standalone with no pagination gem at
+all (JSON APIs, jobs). An in-memory store is bundled for testing
+without Redis.
 
 [日本語ドキュメント](README_ja.md)
 
@@ -142,8 +143,12 @@ time — not the full row contents.
 |---|---|
 | Ruby | >= 3.1 (>= 3.3 for Pagy 43) |
 | Rails (railties / activesupport) | >= 7.0 |
-| Kaminari | ~> 1.2 |
-| Pagy | 8.x, 9.x, and 43.x |
+| Kaminari | ~> 1.2 (optional) |
+| Pagy | 8.x, 9.x, and 43.x (optional) |
+
+Kaminari and Pagy are both optional: Riffle paginates on its own via
+the `page:`/`per:` keywords — see
+[Standalone](#standalone-no-pagination-gem).
 
 Pagy 43 is a ground-up rewrite (`Pagy::Backend` / `Pagy::Frontend` and
 `pagy_url_for` are gone, replaced by `Pagy::Offset` and the `:querify`
@@ -320,6 +325,12 @@ users = User.order(:name).page(page).per(20).riffle(cursor: cursor_id)
 next_cursor = users.riffle_cursor_id
 ```
 
+Or skip Kaminari entirely with the `page:`/`per:` keywords:
+
+```ruby
+users = User.order(:name).riffle(cursor: cursor_id, page: page, per: 20)
+```
+
 #### Why `.riffle` goes last
 
 Kaminari mixes its own `total_count` into the relation when you call `.page`.
@@ -350,6 +361,26 @@ Views work as usual:
 ```erb
 <%== pagy_nav(@pagy) %>
 ```
+
+### Standalone (no pagination gem)
+
+Riffle paginates on its own — no Kaminari or Pagy required. State the
+page and size directly on `.riffle` via the `page:`/`per:` keywords:
+
+```ruby
+users = User.order(:name)
+            .riffle(cursor: params[:cursor_id], page: params[:page], per: 20)
+
+users.records          # => the requested page, from the snapshot
+users.total_count      # => snapshot size
+users.riffle_cursor_id # => echo back as ?cursor_id=
+```
+
+`page` is clamped to >= 1 and both keywords accept request-param
+strings. When Kaminari happens to be in the chain too, the keywords win
+over `.page`/`.per`, so the same code works with or without it. For
+JSON responses, `riffle_meta` bundles the full pager metadata — see
+[API/JSON Responses](#apijson-responses).
 
 ### View Helpers
 
@@ -396,10 +427,41 @@ This ensures the page size is maintained even when deletions occur.
 
 ## API/JSON Responses
 
-Riffle works with existing Kaminari/Pagy serialization. Simply include the `cursor_id` in your response.
+For JSON APIs no pagination gem is needed: pass `page:`/`per:` to
+`.riffle` and read the response metadata from `riffle_meta`:
 
 ```ruby
 # Controller
+def index
+  users = User.order(:name)
+              .riffle(cursor: params[:cursor_id], page: params[:page], per: 20)
+
+  render json: { users: users.records, meta: users.riffle_meta }
+end
+```
+
+`riffle_meta` returns everything a client needs to render a pager and
+request the next page:
+
+```ruby
+{
+  cursor_id: "abc123xyz",  # echo back as ?cursor_id=
+  page: 1,
+  per_page: 20,
+  total_count: 1000,
+  total_pages: 50,
+  next_page: 2,            # nil on the last page
+  prev_page: nil           # nil on the first page
+}
+```
+
+The frontend sends `?cursor_id=xxx&page=2` for subsequent requests.
+
+If you already paginate with Kaminari, its serialization works
+unchanged — build the meta from Kaminari's readers and include the
+`cursor_id`:
+
+```ruby
 def index
   @users = User.order(:name).page(params[:page]).per(20)
                .riffle(cursor: params[:cursor_id])
@@ -415,8 +477,6 @@ def index
   }
 end
 ```
-
-The frontend sends `?cursor_id=xxx&page=2` for subsequent requests.
 
 ## Architecture
 

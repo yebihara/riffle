@@ -183,6 +183,58 @@ RSpec.describe Riffle::Adapters::Kaminari::RelationRiffle do
     end
   end
 
+  context "headless pagination via page:/per: keywords (no .page/.per in the chain)" do
+    it "paginates from the keywords alone" do
+      first = User.order(:name).riffle(cursor: nil, page: 1, per: 5)
+      expect(first.records.map(&:name)).to eq(%w[user-00 user-01 user-02 user-03 user-04])
+
+      second = User.order(:name).riffle(cursor: first.riffle_cursor_id, page: 2, per: 5)
+      expect(second.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+    end
+
+    it "lets the keywords win over chained Kaminari values" do
+      relation = User.order(:name).page(1).per(3).riffle(cursor: nil, page: 2, per: 5)
+      expect(relation.records.map(&:name)).to eq(%w[user-05 user-06 user-07 user-08 user-09])
+    end
+
+    it "accepts request-param strings and clamps page to >= 1" do
+      relation = User.order(:name).riffle(cursor: nil, page: "0", per: "5")
+      expect(relation.records.map(&:name)).to eq(%w[user-00 user-01 user-02 user-03 user-04])
+    end
+  end
+
+  describe "#riffle_meta" do
+    it "returns everything a JSON client needs to render a pager" do
+      relation = User.order(:name).riffle(cursor: nil, page: 2, per: 5)
+      meta = relation.riffle_meta
+
+      expect(meta).to eq(
+        cursor_id: relation.riffle_cursor_id,
+        page: 2,
+        per_page: 5,
+        total_count: 20,
+        total_pages: 4,
+        next_page: 3,
+        prev_page: 1
+      )
+    end
+
+    it "reports nil next_page on the last page and nil prev_page on the first" do
+      last = User.order(:name).riffle(cursor: nil, page: 4, per: 5).riffle_meta
+      expect(last[:next_page]).to be_nil
+      expect(last[:prev_page]).to eq(3)
+
+      first = User.order(:name).riffle(cursor: nil, page: 1, per: 5).riffle_meta
+      expect(first[:next_page]).to eq(2)
+      expect(first[:prev_page]).to be_nil
+    end
+
+    it "reflects the resolved values when paginating through Kaminari's .page/.per" do
+      meta = User.order(:name).page(3).per(6).riffle(cursor: nil).riffle_meta
+      expect(meta).to include(page: 3, per_page: 6, total_count: 20, total_pages: 4)
+    end
+  end
+
   context "non-controller context (Layer 1, no request/params)" do
     it "paginates with an explicit cursor and no controller involved" do
       first = User.order(:name).page(1).per(4).riffle(cursor: nil)
